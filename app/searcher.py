@@ -1,11 +1,11 @@
 import log
-from app.db import SqlHelper
+from app.helper import SqlHelper
 from config import Config
 from app.message import Message
 from app.downloader import Downloader
 from app.indexer import BuiltinIndexer, Jackett, Prowlarr
 from app.media import Media
-from app.utils import ProgressController
+from app.helper import ProgressController
 from app.utils.types import SearchType, MediaType
 
 
@@ -53,6 +53,10 @@ class Searcher:
             return []
         if not self.indexer:
             return []
+        # 检索IMDBID
+        if match_media and not match_media.imdb_id:
+            match_media.set_tmdb_info(self.media.get_tmdb_info(mtype=match_media.type,
+                                                               tmdbid=match_media.tmdb_id))
         return self.indexer.search_by_keyword(key_word=key_word,
                                               filter_args=filter_args,
                                               match_type=match_type,

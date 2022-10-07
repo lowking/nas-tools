@@ -1,8 +1,16 @@
 import json
+import re
+import time
 import traceback
 from datetime import datetime
 from multiprocessing.dummy import Pool as ThreadPool
 from threading import Lock
+
+from lxml import etree
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as es
+
 
 import log
 from app.message import Message
@@ -10,7 +18,9 @@ from app.filterrules import FilterRule
 from app.sites import SiteUserInfoFactory
 from app.utils.commons import singleton
 from app.utils import RequestUtils, StringUtils
-from app.db import SqlHelper
+from app.helper import ChromeHelper
+from app.helper import SqlHelper
+from config import SITE_CHECKIN_XPATH, Config
 
 lock = Lock()
 
@@ -113,19 +123,23 @@ class Sites:
                 refresh_sites = self.get_sites(statistic=True)
             else:
                 refresh_sites = [site for site in self.get_sites(statistic=True) if site.get("name") in specify_sites]
-
             refresh_all = len(self.get_sites(statistic=True)) == len(refresh_sites)
-
-            with ThreadPool(min(len(refresh_sites), self._MAX_CONCURRENCY)) as p:
-                site_user_infos = p.map(self.__refresh_pt_data, refresh_sites)
-                site_user_infos = [info for info in site_user_infos if info]
-
-                # 登记历史数据
-                SqlHelper.insert_site_statistics_history(site_user_infos)
-                # 实时用户数据
-                SqlHelper.update_site_user_statistics(site_user_infos)
-                # 实时做种信息
-                SqlHelper.update_site_seed_info(site_user_infos)
+            if Config().get_config('laboratory').get('chrome_browser'):
+                site_user_infos = []
+                for site in refresh_sites:
+                    site_user_info = self.__refresh_pt_data(site)
+                    if site_user_info:
+                        site_user_infos.append(site_user_info)
+            else:
+                with ThreadPool(min(len(refresh_sites), self._MAX_CONCURRENCY)) as p:
+                    site_user_infos = p.map(self.__refresh_pt_data, refresh_sites)
+                    site_user_infos = [info for info in site_user_infos if info]
+            # 登记历史数据
+            SqlHelper.insert_site_statistics_history(site_user_infos)
+            # 实时用户数据
+            SqlHelper.update_site_user_statistics(site_user_infos)
+            # 实时做种信息
+            SqlHelper.update_site_seed_info(site_user_infos)
 
         # 更新时间
         if refresh_all:
@@ -145,7 +159,11 @@ class Sites:
         ua = site_info.get("ua")
         unread_msg_notify = site_info.get("unread_msg_notify")
         try:
-            site_user_info = SiteUserInfoFactory.build(url=site_url, site_name=site_name, site_cookie=site_cookie, ua=ua)
+            site_user_info = SiteUserInfoFactory.build(url=site_url,
+                                                       site_name=site_name,
+                                                       site_cookie=site_cookie,
+                                                       ua=ua,
+                                                       chrome=Config().get_config('laboratory').get('chrome_browser'))
             if site_user_info:
                 log.debug(f"【SITES】站点 {site_name} 开始以 {site_user_info.site_schema()} 模型解析")
                 # 开始解析
@@ -195,6 +213,8 @@ class Sites:
         站点签到入口，由定时服务调用
         """
         status = []
+        # 浏览器
+        browser = ChromeHelper()
         for site_info in self.get_sites(signin=True):
             if not site_info:
                 continue
@@ -203,20 +223,90 @@ class Sites:
                 site_url = site_info.get("signurl")
                 site_cookie = site_info.get("cookie")
                 ua = site_info.get("ua")
-                log.info("【SITES】开始站点签到：%s" % site)
                 if not site_url or not site_cookie:
                     log.warn("【SITES】未配置 %s 的站点地址或Cookie，无法签到" % str(site))
                     continue
-                res = RequestUtils(cookies=site_cookie, headers=ua).get_res(url=site_url)
-                if res and res.status_code == 200:
-                    if not self.__is_signin_success(res.text):
-                        status.append("%s 签到失败，cookie已过期" % site)
-                    else:
-                        status.append("%s 签到成功" % site)
-                elif res and res.status_code:
-                    status.append("%s 签到失败，状态码：%s" % (site, res.status_code))
+                if browser.get_browser() and Config().get_config('laboratory').get('chrome_browser'):
+                    # 首页
+                    log.info("【SITES】开始站点仿真签到：%s" % site)
+                    home_url = "%s://%s" % StringUtils.get_url_netloc(site_url)
+                    try:
+                        browser.visit(url=home_url, ua=ua, cookie=site_cookie)
+                    except Exception as err:
+                        print(str(err))
+                        log.warn("【SITES】%s 无法打开网站" % site)
+                        status.append("【%s】无法打开网站！" % site)
+                        continue
+                    # 循环检测是否过cf
+                    cloudflare = False
+                    for i in range(0, 10):
+                        if browser.get_title() != "Just a moment...":
+                            cloudflare = True
+                            break
+                        time.sleep(1)
+                    if not cloudflare:
+                        log.warn("【SITES】%s 跳转站点失败" % site)
+                        status.append("【%s】跳转站点失败！" % site)
+                        continue
+                    # 判断是否已签到
+                    html_text = browser.get_html()
+                    if not html_text:
+                        log.warn("【SITES】%s 获取站点源码失败" % site)
+                        continue
+                    # 查找签到按钮
+                    html = etree.HTML(html_text)
+                    xpath_str = None
+                    for xpath in SITE_CHECKIN_XPATH:
+                        if html.xpath(xpath):
+                            xpath_str = xpath
+                            break
+                    if re.search(r'已签|签到已得', html_text, re.IGNORECASE) \
+                            and not xpath_str:
+                        log.info("【SITES】%s 今日已签到" % site)
+                        status.append("【%s】今日已签到" % site)
+                        continue
+                    if not xpath_str:
+                        if self.__is_signin_success(html_text):
+                            log.warn("【SITES】%s 未找到签到按钮，模拟登录成功" % site)
+                            status.append("【%s】模拟登录成功" % site)
+                        else:
+                            log.info("【SITES】%s 未找到签到按钮，且模拟登录失败" % site)
+                            status.append("【%s】模拟登录失败！" % site)
+                        continue
+                    # 开始仿真
+                    try:
+                        checkin_obj = WebDriverWait(driver=browser.get_browser(), timeout=6).until(
+                            es.element_to_be_clickable((By.XPATH, xpath_str)))
+                        if checkin_obj:
+                            checkin_obj.click()
+                            log.info("【SITES】%s 仿真签到成功" % site)
+                            status.append("【%s】签到成功" % site)
+                    except Exception as e:
+                        log.warn("【SITES】%s 仿真签到失败：%s" % (site, str(e)))
+                        status.append("【%s】签到失败！" % site)
+                        continue
+                # 模拟登录
                 else:
-                    status.append("%s 签到失败，无法打开网站" % site)
+                    if site_url.find("attendance.php") != -1:
+                        checkin_text = "签到"
+                    else:
+                        checkin_text = "模拟登录"
+                    log.info(f"【SITES】开始站点{checkin_text}：{site}")
+                    # 访问链接
+                    res = RequestUtils(cookies=site_cookie, headers=ua).get_res(url=site_url)
+                    if res and res.status_code == 200:
+                        if not self.__is_signin_success(res.text):
+                            log.warn(f"【SITES】{site} {checkin_text}失败，请检查cookie")
+                            status.append(f"【{site}】{checkin_text}失败，请检查cookie！")
+                        else:
+                            log.info(f"【SITES】{site} {checkin_text}成功")
+                            status.append(f"【{site}】{checkin_text}成功")
+                    elif res and res.status_code:
+                        log.warn(f"【SITES】{site} {checkin_text}失败，状态码：{res.status_code}")
+                        status.append(f"【{site}】{checkin_text}失败，状态码：{res.status_code}！")
+                    else:
+                        log.warn(f"【SITES】{site} {checkin_text}失败，无法打开网站")
+                        status.append(f"【{site}】{checkin_text}失败，无法打开网站！")
             except Exception as e:
                 log.error("【SITES】%s 签到出错：%s - %s" % (site, str(e), traceback.format_exc()))
         if status:
@@ -338,7 +428,6 @@ class Sites:
             return
         site_url = site.get("signurl") or site.get("rssurl")
         if site_url:
-            scheme, netloc = StringUtils.get_url_netloc(site_url)
-            site_url = "%s://%s" % (scheme, netloc)
+            site_url = "%s://%s" % StringUtils.get_url_netloc(site_url)
             return site_url
         return ""
