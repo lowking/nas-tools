@@ -2,12 +2,16 @@ import json
 import os.path
 import tempfile
 from functools import reduce
+from threading import Lock
 
 from app.utils import SystemUtils, RequestUtils
 from app.utils.commons import singleton
 import undetected_chromedriver.v2 as uc
 
 from app.utils.types import OsType
+from config import Config
+
+CHROME_LOCK = Lock()
 
 
 @singleton
@@ -20,6 +24,11 @@ class ChromeHelper(object):
         self.init_config()
 
     def init_config(self):
+        if self._chrome:
+            self._chrome.quit()
+            self._chrome = None
+        if not Config().get_config('laboratory').get('chrome_browser'):
+            return
         if SystemUtils.get_system() == OsType.LINUX \
                 and self._executable_path \
                 and not os.path.exists(self._executable_path):
@@ -46,11 +55,11 @@ class ChromeHelper(object):
         return self._chrome
 
     def visit(self, url, ua=None, cookie=None):
-        self._chrome.get(url)
         if ua:
             self._chrome.execute_cdp_cmd("Emulation.setUserAgentOverride", {
                 "userAgent": ua
             })
+        self._chrome.get(url)
         if cookie:
             self._chrome.delete_all_cookies()
             for cookie in RequestUtils.cookie_parse(cookie, array=True):
@@ -62,6 +71,14 @@ class ChromeHelper(object):
 
     def get_html(self):
         return self._chrome.page_source
+
+    def get_cookies(self):
+        cookie_str = ""
+        for _cookie in self._chrome.get_cookies():
+            if not _cookie:
+                continue
+            cookie_str += "%s=%s;" % (_cookie.get("name"), _cookie.get("value"))
+        return cookie_str
 
     def __del__(self):
         if self._chrome:
