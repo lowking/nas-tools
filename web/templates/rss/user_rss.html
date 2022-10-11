@@ -69,15 +69,18 @@
             </a>
           </div>
           <div class="card-actions btn-actions">
-              <a href="javascript:edit_userrss_modal('{{ Task.id }}')" class="btn-action" title="编辑任务">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon ms-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 7h-3a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-3" /><path d="M9 15h3l8.5 -8.5a1.5 1.5 0 0 0 -3 -3l-8.5 8.5v3" /><line x1="16" y1="5" x2="19" y2="8" /></svg>
-              </a>
-              <a href="javascript:del_userrss_modal('{{ Task.id }}', '{{ Task.name }}')" class="btn-action" title="删除任务">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><desc>Download more icon variants from https://tabler-icons.io/i/x</desc><path stroke="none" d="M0 0h24v24H0z" fill="none"/><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-              </a>
-            </div>
+            <a href="javascript:show_userrss_detail('{{ Task.id }}')" class="btn-action">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon ms-1" width="20" height="20" fill="currentColor"  viewBox="0 0 16 16"> <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/> </svg>
+            </a>
+            <a href="javascript:edit_userrss_modal('{{ Task.id }}')" class="btn-action" title="编辑任务">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon ms-1" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 7h-3a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-3" /><path d="M9 15h3l8.5 -8.5a1.5 1.5 0 0 0 -3 -3l-8.5 8.5v3" /><line x1="16" y1="5" x2="19" y2="8" /></svg>
+            </a>
+            <a href="javascript:del_userrss_modal('{{ Task.id }}', '{{ Task.name }}')" class="btn-action" title="删除任务">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><desc>Download more icon variants from https://tabler-icons.io/i/x</desc><path stroke="none" d="M0 0h24v24H0z" fill="none"/><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </a>
+          </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" id="detail_{{ Task.id }}" style="display: {% if Count > 2 %}none{% else %}block{% endif %};">
           <div class="datagrid">
             <div class="datagrid-item">
               <div class="datagrid-title">地址</div>
@@ -131,7 +134,7 @@
             </div>
             <div class="datagrid-item">
               <div class="datagrid-title">保存路径</div>
-              <div class="datagrid-content">{{ Task.save_dir or '自动' }}</div>
+              <div class="datagrid-content">{{ Task.note.save_path or '自动' }}</div>
             </div>
             <div class="datagrid-item">
               <div class="datagrid-title">状态</div>
@@ -146,7 +149,13 @@
             <div class="datagrid-item">
               <div class="datagrid-title">已处理数量</div>
               <div class="datagrid-content">
-                {{ Task.counter or 0 }}
+                {% if Task.uses == 'D' %}
+                <a id="rss_history_btn" href="javascript:show_rss_history_modal('{{ Task.id }}')" class="btn-link">
+                  {{ Task.counter or 0 }}
+                </a>
+                {% else %}
+                  {{ Task.counter or 0 }}
+                {% endif %}
               </div>
             </div>
             <div class="datagrid-item">
@@ -155,6 +164,15 @@
                 {{ Task.update_time or '' }}
               </div>
             </div>
+            {% if Task.uses == 'D' %}
+            <div class="datagrid-item">
+              <div class="datagrid-content">
+                <a id="rss_articlesbtn" href="javascript:show_rss_articles_modal('{{ Task.id }}')" class="btn btn-secondary">
+                  预览
+                </a>
+              </div>
+            </div>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -181,7 +199,7 @@
     <div class="modal-content">
       <div class="card border-top-0">
         <div class="card-header">
-          <h5 class="modal-title" id="userrss_modal_title">新建任务</h5>
+          <h5 class="modal-title" id="userrss_modal_title"></h5>
           <input type="hidden" id="userrss_id">
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
@@ -257,7 +275,7 @@
             <div class="col-lg-8">
               <div class="mb-3">
                 <label class="form-label">保存路径</label>
-                <input type="text" id="userrss_note" class="form-control" placeholder="留空自动选择保存路径">
+                <input type="text" id="userrss_note_path" class="form-control" placeholder="留空自动选择保存路径">
               </div>
             </div>
             <div class="col-lg-4">
@@ -270,11 +288,111 @@
               </div>
             </div>
           </div>
+          <details>
+            <summary class="summary">
+              下载设置 <span class="form-help" title="下载设置仅适用于Qbittorrent和Transmission，其中分类和布局仅适用于Qbittorrent" data-bs-toggle="tooltip">?</span>
+            </summary>
+            <div class="row mb-2"></div>
+            <div class="row">
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">分类 </label>
+                  <input type="text" id="userrss_note_category" class="form-control" placeholder="">
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">标签 </label>
+                  <input type="text" id="userrss_note_tags" class="form-control" placeholder="">
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">布局 </label>
+                  <select class="form-select" id="userrss_note_layout">
+                    <option value="" selected>全局</option>
+                    <option value="Original">原始</option>
+                    <option value="Subfolder">创建子文件夹</option>
+                    <option value="NoSubfolder">不建子文件夹</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">动作 </label>
+                  <select class="form-select" id="userrss_note_paused">
+                    <option value="" selected>添加后开始</option>
+                    <option value="Y">添加后暂停</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">上传速度限制 </label>
+                  <input type="text" id="userrss_note_upload" class="form-control" placeholder="KB/s，不启用则留空">
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">下载速度限制 </label>
+                  <input type="text" id="userrss_note_download" class="form-control" placeholder="KB/s，不启用则留空">
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">分享率限制 </label>
+                  <input type="text" id="userrss_note_ratio" class="form-control" placeholder="不启用则留空">
+                </div>
+              </div>
+              <div class="col-lg-3">
+                <div class="mb-3">
+                  <label class="form-label">做种时间限制 </label>
+                  <input type="text" id="userrss_note_seeding_time" class="form-control" placeholder="分钟，不启用则留空">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+            </div>
+          </details>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-link me-auto" data-bs-dismiss="modal">取消</button>
-        <a href="javascript:add_or_edit_userrss_task()" id="add_or_edit_userrss_btn" class="btn btn-primary">确定</a>
+        <a href="javascript:add_or_edit_userrss_task()" id="add_or_edit_userrss_btn" class="btn btn-primary">保存</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal modal-blur fade" id="modal-rss-articles" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="card border-top-0">
+        <div class="card-header">
+          <h5 class="modal-title">订阅预览</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="table-responsive" style="overflow-y: auto; max-height: 35em;">
+          <table id="table-rss-articles" class="table table-vcenter card-table">
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal modal-blur fade" id="modal-rss-history" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="card border-top-0">
+        <div class="card-header">
+          <h5 class="modal-title">订阅下载历史</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="table-responsive" style="overflow-y: auto; max-height: 35em;">
+          <table id="table-rss-history" class="table table-vcenter card-table">
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -283,7 +401,25 @@
   // 显示新增任务
   function show_userrss_modal(){
     $("#userrss_id").val('');
-    $("#add_or_edit_userrss_btn").text('新增');
+    $("#userrss_modal_title").text("新增订阅");
+    $("#userrss_name").val('');
+    $("#userrss_interval").val('');
+    $("#userrss_address").val('');
+    $("#userrss_include").val('');
+    $("#userrss_exclude").val('');
+    $("#userrss_filterrule").val('');
+    $("#userrss_parser").val('1');
+    $("#userrss_state").val('N');
+    $("#userrss_uses").val('D');
+    $("#userrss_note_path").val('');
+    $("#userrss_note_category").val('');
+    $("#userrss_note_tags").val('');
+    $("#userrss_note_layout").val('');
+    $("#userrss_note_paused").val('');
+    $("#userrss_note_upload").val('');
+    $("#userrss_note_download").val('');
+    $("#userrss_note_ratio").val('');
+    $("#userrss_note_seeding_time").val('');
     $("#modal-userrss").modal('show');
   }
 
@@ -292,6 +428,7 @@
     $("#userrss_id").val(id);
     ajax_post("get_userrss_task", {id:id}, function (ret) {
       if(ret.code == 0){
+        $("#userrss_modal_title").text("编辑订阅");
         $("#userrss_name").val(ret.detail.name);
         $("#userrss_interval").val(ret.detail.interval);
         $("#userrss_address").val(ret.detail.address);
@@ -301,7 +438,15 @@
         $("#userrss_parser").val(ret.detail.parser);
         $("#userrss_state").val(ret.detail.state);
         $("#userrss_uses").val(ret.detail.uses);
-        $("#userrss_note").val(ret.detail.save_dir);
+        $("#userrss_note_path").val(ret.detail.note.save_path);
+        $("#userrss_note_category").val(ret.detail.note.category);
+        $("#userrss_note_tags").val(ret.detail.note.tags);
+        $("#userrss_note_layout").val(ret.detail.note.content_layout);
+        $("#userrss_note_paused").val(ret.detail.note.is_paused);
+        $("#userrss_note_upload").val(ret.detail.note.upload_limit);
+        $("#userrss_note_download").val(ret.detail.note.download_limit);
+        $("#userrss_note_ratio").val(ret.detail.note.ratio_limit);
+        $("#userrss_note_seeding_time").val(ret.detail.note.seeding_time_limit);
         $("#modal-userrss").modal('show');
       }
     });
@@ -317,8 +462,18 @@
     });
   }
 
-  // 新增任务保存
+  // 折叠任务详情
+  function show_userrss_detail(taskid){
+    if($(`#detail_${taskid}`)[0].style["display"] == "none"){
+      $(`#detail_${taskid}`).attr("style", "display: block;");
+    }else{
+      $(`#detail_${taskid}`).attr("style", "display: none;");
+    };
+  }
+
+  // 新增/编辑任务保存
   function add_or_edit_userrss_task(){
+    $("#add_or_edit_userrss_btn").text("保存中").attr("disabled", true);
     id = $("#userrss_id").val();
     name = $("#userrss_name").val();
     if(!name){
@@ -348,6 +503,48 @@
     }else{
       $("#userrss_parser").removeClass("is-invalid");
     }
+    save_path = $("#userrss_note_path").val();
+    category = $("#userrss_note_category").val();
+    tags = $("#userrss_note_tags").val();
+    content_layout = $("#userrss_note_layout").val();
+    is_paused = $("#userrss_note_paused").val();
+    upload_limit = $("#userrss_note_upload").val();
+    if(upload_limit && isNaN(upload_limit)){
+      $("#userrss_note_upload").addClass("is-invalid");
+      return;
+    }else{
+      $("#userrss_note_upload").removeClass("is-invalid");
+    }
+    download_limit = $("#userrss_note_download").val();
+    if(download_limit && isNaN(download_limit)){
+      $("#userrss_note_download").addClass("is-invalid");
+      return;
+    }else{
+      $("#userrss_note_download").removeClass("is-invalid");
+    }
+    ratio_limit = $("#userrss_note_ratio").val();
+    if(ratio_limit && isNaN(ratio_limit)){
+      $("#userrss_note_ratio").addClass("is-invalid");
+      return;
+    }else{
+      $("#userrss_note_ratio").removeClass("is-invalid");
+    }
+    seeding_time_limit = $("#userrss_note_seeding_time").val();
+    if(seeding_time_limit && isNaN(seeding_time_limit)){
+      $("#userrss_note_seeding_time").addClass("is-invalid");
+      return;
+    }else{
+      $("#userrss_note_seeding_time").removeClass("is-invalid");
+    }
+    note = {save_path: save_path,
+            category: category,
+            tags: tags,
+            content_layout: content_layout,
+            is_paused: is_paused,
+            upload_limit: upload_limit,
+            download_limit: download_limit,
+            ratio_limit: ratio_limit,
+            seeding_time_limit: seeding_time_limit};
     var params = {id: id,
                   name: name,
                   address: address,
@@ -358,9 +555,10 @@
                   exclude: $("#userrss_exclude").val(),
                   filterrule: $("#userrss_filterrule").val(),
                   state: $("#userrss_state").val(),
-                  note: $("#userrss_note").val()};
+                  note: JSON.stringify(note)};
     ajax_post("update_userrss_task", params, function(ret){
       $("#modal-userrss").modal('hide');
+      $("#add_or_edit_userrss_btn").attr("disabled", false);
       navmenu('user_rss');
     });
   }
@@ -370,7 +568,7 @@
     navmenu('rss_parser');
   }
 
-  //立即运行任务
+  // 立即运行任务
   function run_userrss_now(id){
     show_wait_process();
     ajax_post("run_userrss", {"id": id}, function(ret){
@@ -378,6 +576,209 @@
       show_success_modal("任务运行完成！", function(){
         navmenu('user_rss');
       });
+    });
+  }
+  
+  // 报文预览
+  function show_rss_articles_modal(id){
+    show_wait_process();
+    ajax_post("list_rss_articles", {"id": id}, function(ret){
+      hide_wait_process();
+      if(ret.code == 0){
+        articles = ret.data;
+        var content_th = `<thead><tr>
+                          <th class="text-nowrap">共计${ret.count}条</th>
+                          <th class="text-nowrap">状态</th>
+                          <th class="text-nowrap w-10">发布时间</th>
+                          </tr></thead>`;
+        var content_td = '';
+        for(var i = 0; i < articles.length; i ++){
+          var article = articles[i];
+          var title = '';
+          var link = '';
+          var size = '';
+          var date = '';
+          var finish_flag = '';
+          if(article.title){
+            title_param = article.title.replace(/\'/g, "&#39;");
+            title = `<span>${article.title}</span> 
+                      <a class="ms-2" title="识别匹配" href='javascript:rss_article_test("${i}", "${id}", "${title_param}")' data-bs-toggle="tooltip">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-language" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                          <path d="M4 5h7"></path>
+                          <path d="M9 3v2c0 4.418 -2.239 8 -5 8"></path>
+                          <path d="M5 9c-.003 2.144 2.952 3.908 6.7 4"></path>
+                          <path d="M12 20l4 -9l4 9"></path>
+                          <path d="M19.1 18h-6.2"></path>
+                        </svg>
+                      </a>`;
+            if(article.link){
+              title = `<a href="${article.link}" target="_blank">${title}</a>`;
+            };
+          };
+          if(article.date){
+            date = article.date.split(" ");
+            date = `<small>${date[0]}<br>${date[1]}</small>`;
+          };
+          if(article.size){
+            size = `<span class="badge badge-outline text-green me-1 mb-1" title="大小">${article.size}</span>`;
+          };
+          if(article.finish_flag){
+            finish_flag = `<span class="badge badge-outline text-blue me-1 mb-1">已处理</span>`;
+          }else{
+            finish_flag = `<span class="badge badge-outline text-yellow me-1 mb-1">未处理</span>`;
+          };
+          var content_td = `${content_td}<tr><td>${title}${size}<div id='info_${i}'></div></td>><td id='flag_${i}'>${finish_flag}</td><td>${date}</td></tr>`;
+        content_tb = `<tbody>${content_td}</tbody>`;
+        content = `${content_th}${content_tb}`;
+        };
+      }else{
+        var content = `<div class="empty"><p class="empty-title">${ret.msg}</p></div>`;
+      };
+      $("#table-rss-articles").empty();
+      $("#table-rss-articles").append(content);
+      $("#modal-rss-articles").modal('show');
+    });
+  }
+
+  // rss报文测试
+  function rss_article_test(id, taskid, title){
+    var info_id = `#info_${id}`;
+    var flag_id = `#flag_${id}`;
+    ajax_post("rss_article_test", {"taskid": taskid, "title": title}, function (ret) {
+      if(ret.code == 0){
+        $(info_id).empty();
+        console.log(info_id);
+        var ignored_words = [];
+        var replaced_words = [];
+        var offset_words = [];
+        if(ret.data.ignored_words){
+          ignored_words = ret.data.ignored_words;
+        }
+        if(ret.data.replaced_words){
+          replaced_words = ret.data.replaced_words;
+        }
+        if(ret.data.offset_words){
+          offset_words = ret.data.offset_words;
+        }
+        var words = ignored_words + replaced_words + offset_words;
+        if(words.length != 0){
+          if(ret.data.org_string){
+            $(info_id).append(`<div class="mb-3" ><label class="form-label">识别使用名称：<span class="badge badge-outline text-cyan me-1 mb-1" style="vertical-align: middle;white-space: normal;text-align: left;word-break: break-all;" title="自定义识别词过滤后识别用名">${ret.data.org_string}</span></label></div>`);
+          }
+          if(ignored_words.length != 0){
+            var ignored_word_content = '<div class="mb-3"><label class="form-label">应用屏蔽词：';
+            for(ignored_word of ignored_words){
+              ignored_word_content = ignored_word_content + `<span class="badge badge-outline text-cyan me-1 mb-1" style="vertical-align: middle;">${ignored_word}</span>`;
+            };  
+            $(info_id).append(ignored_word_content + '</label></div>');
+          }
+          if(replaced_words.length != 0){
+            var replaced_words_content = '<div class="mb-3"><label class="form-label">应用替换词：';
+            for(replaced_word of replaced_words){
+              replaced_words_content = replaced_words_content + `<span class="badge badge-outline text-cyan me-1 mb-1" style="vertical-align: middle;">${replaced_word}</span>`;
+            };
+            $(info_id).append(replaced_words_content + '</label></div>');
+          }
+          if(offset_words.length != 0){
+            var offset_words_content = '<div class="mb-3"><label class="form-label">应用集数偏移：';
+            for(offset_word of offset_words){
+              offset_words_content = offset_words_content + `<span class="badge badge-outline text-cyan me-1 mb-1" style="vertical-align: middle;">${offset_word}</span>`;
+            };
+            $(info_id).append(offset_words_content + '</label></div>');
+          }
+        }
+        if(ret.data.type){
+          $(info_id).append(`<span class="badge badge-outline text-blue me-1 mb-1" title="类型">${ret.data.type}</span>`);
+        }
+        if(ret.data.category){
+          $(info_id).append(`<span class="badge badge-outline text-blue me-1 mb-1" title="类别">${ret.data.category}</span>`);
+        }
+        if(ret.data.name){
+          $(info_id).append(`<span class="badge badge-outline text-red me-1 mb-1" title="识别名称">${ret.data.name}</span>`);
+        }
+        if(ret.data.title){
+          $(info_id).append(`<span class="badge badge-outline text-red me-1 mb-1" title="标题">${ret.data.title}</span>`);
+        }
+        if(ret.data.year){
+          $(info_id).append(`<span class="badge badge-outline text-orange me-1 mb-1" title="年份">${ret.data.year}</span>`);
+        }
+        if(ret.data.season_episode){
+          $(info_id).append(`<span title="季集"><a class="badge badge-outline text-orange me-1 mb-1" href="${ret.data.tmdb_S_E_link}" target="_blank">${ret.data.season_episode}</a></span>`);
+        }
+        if(ret.data.part){
+          $(info_id).append(`<span class="badge badge-outline text-orange me-1 mb-1" title="分集">${ret.data.part}</span>`);
+        }
+        if(ret.data.tmdbid){
+          $(info_id).append(`<span title="TMDB ID"><a class="badge badge-outline text-green me-1 mb-1" href="${ret.data.tmdblink}" target="_blank">${ret.data.tmdbid}</a></span>`);
+        }
+        if(ret.data.restype){
+          $(info_id).append(`<span class="badge me-1 mb-1" title="质量">${ret.data.restype}</span>`);
+        }
+        if(ret.data.pix){
+          $(info_id).append(`<span class="badge me-1 mb-1" title="分辨率">${ret.data.pix}</span>`);
+        }
+        if(ret.data.video_codec){
+          $(info_id).append(`<span class="badge me-1 mb-1" title="视频编码">${ret.data.video_codec}</span>`);
+        }
+        if(ret.data.audio_codec){
+          $(info_id).append(`<span class="badge me-1 mb-1" title="音频编码">${ret.data.audio_codec}</span>`);
+        }
+        if(ret.data.team){
+          $(info_id).append(`<span class="badge badge-outline text-yellow me-1 mb-1" title="制作组/字幕组">${ret.data.team}</span>`);
+        }
+        if(ret.data.match_flag){
+          $(flag_id).append(`<br><span class="badge badge-outline text-green me-1 mb-1">匹配</span>`);
+        }else{
+          $(flag_id).append(`<br><span class="badge badge-outline text-red me-1 mb-1">不匹配</span>`);
+        }
+        if(ret.data.exist_flag){
+          $(flag_id).append(`<br><span class="badge badge-outline text-green me-1 mb-1">本地已存在</span>`);
+        }else{
+          $(flag_id).append(`<br><span class="badge badge-outline text-orange me-1 mb-1">本地不存在</span>`);
+        }
+      }
+    })
+  }
+
+  // 订阅下载记录
+  function show_rss_history_modal(id){
+    show_wait_process();
+    ajax_post("list_rss_history", {"id": id}, function(ret){
+      hide_wait_process();
+      if(ret.code == 0){
+        downloads = ret.data;
+        var content_th = `<thead><tr>
+                          <th class="text-nowrap">共计${ret.count}条</th>
+                          <th class="text-nowrap">下载器</th>
+                          <th class="text-nowrap w-10">下载时间</th>
+                          </tr></thead>`;
+        var content_td = '';
+        for(var i = 0; i < downloads.length; i ++){
+          var download = downloads[i];
+          var title = '';
+          var downloader = '';
+          var date = '';
+          if(download.title){
+            title = `<span>${download.title}</span>`
+          };
+          if(download.date){
+            date = download.date.split(" ");
+            date = `<small>${date[0]}<br>${date[1]}</small>`;
+          };
+          if(download.downloader){
+            downloader = `<span class="badge me-1 mb-1" title="下载器">${download.downloader}</span>`;
+          };
+          var content_td = `${content_td}<tr><td>${title}</td>><td>${downloader}</td><td>${date}</td></tr>`;
+        content_tb = `<tbody>${content_td}</tbody>`;
+        content = `${content_th}${content_tb}`;
+        };
+      }else{
+        var content = `<div class="empty"><p class="empty-title">${ret.msg}</p></div>`;
+      };
+      $("#table-rss-history").empty();
+      $("#table-rss-history").append(content);
+      $("#modal-rss-history").modal('show');
     });
   }
 

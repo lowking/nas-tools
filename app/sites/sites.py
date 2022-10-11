@@ -55,6 +55,9 @@ class Sites:
         获取站点配置
         """
         ret_sites = []
+        # 补全 favicon
+        site_favicons = SqlHelper.get_site_user_statistics()
+        site_favicons = {site[0]: site[13] for site in site_favicons}
         for site in self.__pt_sites:
             # 是否解析种子详情为|分隔的第1位
             site_parse = str(site[9]).split("|")[0] or "Y"
@@ -88,6 +91,7 @@ class Sites:
                 "rss_enable": rss_enable,
                 "brush_enable": brush_enable,
                 "statistic_enable": statistic_enable,
+                "favicon": site_favicons.get(site[1], ""),
                 "ua": ua
             }
             if siteid and int(site[0]) == int(siteid):
@@ -205,7 +209,14 @@ class Sites:
         if unread_msg_notify != 'Y':
             return
 
-        self.message.sendmsg(title=f"站点 {site_user_info.site_name} 收到 {site_user_info.message_unread} 条新消息，请登陆查看")
+        # 解析出内容，则发送内容
+        if len(site_user_info.message_unread_contents) > 0:
+            for head, date, content in site_user_info.message_unread_contents:
+                msg_title = f"【站点 {site_user_info.site_name} 消息】"
+                msg_text = f"时间：{date}\n标题：{head}\n内容：\n{content}"
+                self.message.sendmsg(title=msg_title, text=msg_text)
+        else:
+            self.message.sendmsg(title=f"站点 {site_user_info.site_name} 收到 {site_user_info.message_unread} 条新消息，请登陆查看")
 
     def signin(self):
         """
