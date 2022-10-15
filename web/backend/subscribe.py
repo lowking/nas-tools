@@ -1,6 +1,9 @@
+from app.media.douban import DouBan
 from app.helper import SqlHelper
 from app.media.doubanv2api import DoubanApi
 from app.media import MetaInfo, Media
+from app.message import Message
+from app.utils import Torrent
 from app.utils.types import MediaType
 
 
@@ -17,7 +20,9 @@ def add_rss_subscribe(mtype, name, year,
                       rss_team=None,
                       rss_rule=None,
                       state="D",
-                      rssid=None):
+                      rssid=None,
+                      total_ep=None,
+                      current_ep=None):
     """
     添加电影、电视剧订阅
     :param mtype: 类型，电影、电视剧、动漫
@@ -36,6 +41,8 @@ def add_rss_subscribe(mtype, name, year,
     :param rss_rule: 关键字过滤
     :param state: 添加订阅时的状态
     :param rssid: 修改订阅时传入
+    :param total_ep: 总集数
+    :param current_ep: 开始订阅集数
     :return: 错误码：0代表成功，错误信息
     """
     if not name:
@@ -52,6 +59,7 @@ def add_rss_subscribe(mtype, name, year,
         else:
             title = "%s %s".strip() % (name, year)
         if tmdbid:
+            # 根据TMDBID查询
             media_info = MetaInfo(title=title, mtype=mtype)
             media_info.set_tmdb_info(media.get_tmdb_info(mtype=mtype, tmdbid=tmdbid))
             if not media_info or not media_info.tmdb_info or not tmdbid:
@@ -64,21 +72,30 @@ def add_rss_subscribe(mtype, name, year,
             if media_info and media_info.tmdb_info:
                 tmdbid = media_info.tmdb_id
             elif doubanid:
-                # 查询豆瓣，从推荐加订阅的情况
-                if mtype == MediaType.MOVIE:
-                    douban_info = DoubanApi().movie_detail(doubanid)
-                else:
-                    douban_info = DoubanApi().tv_detail(doubanid)
+                # 先从豆瓣网页抓取（含TMDBID）
+                douban_info = DouBan().get_media_detail_from_web("https://movie.douban.com/subject/%s/" % doubanid)
+                if not douban_info:
+                    if mtype == MediaType.MOVIE:
+                        douban_info = DoubanApi().movie_detail(doubanid)
+                    else:
+                        douban_info = DoubanApi().tv_detail(doubanid)
                 if not douban_info or douban_info.get("localized_message"):
                     return 1, "无法查询到豆瓣媒体信息", None
                 media_info = MetaInfo(title="%s %s".strip() % (douban_info.get('title'), year), mtype=mtype)
-                media_info.title = douban_info.get('title')
-                media_info.year = douban_info.get("year")
-                media_info.type = mtype
-                media_info.backdrop_path = douban_info.get("cover_url")
-                media_info.tmdb_id = "DB:%s" % doubanid
-                media_info.overview = douban_info.get("intro")
-                media_info.total_episodes = douban_info.get("episodes_count")
+                # 以IMDBID查询TMDB
+                if douban_info.get("imdbid"):
+                    tmdbid = Media().get_tmdbid_by_imdbid(douban_info.get("imdbid"))
+                    if tmdbid:
+                        media_info.set_tmdb_info(Media().get_tmdb_info(mtype=mtype, tmdbid=tmdbid))
+                # 无法识别TMDB时以豆瓣信息订阅
+                if not media_info.tmdb_info:
+                    media_info.title = douban_info.get('title')
+                    media_info.year = douban_info.get("year")
+                    media_info.type = mtype
+                    media_info.backdrop_path = douban_info.get("cover_url")
+                    media_info.tmdb_id = "DB:%s" % doubanid
+                    media_info.overview = douban_info.get("intro")
+                    media_info.total_episodes = douban_info.get("episodes_count")
                 # 合并季
                 if season:
                     media_info.begin_season = int(season)
@@ -118,7 +135,9 @@ def add_rss_subscribe(mtype, name, year,
                                     rss_team=rss_team,
                                     rss_rule=rss_rule,
                                     state=state,
-                                    match=match)
+                                    match=match,
+                                    total_ep=total_ep,
+                                    current_ep=current_ep)
         else:
             if rssid:
                 SqlHelper.delete_rss_movie(rssid=rssid)
@@ -164,6 +183,64 @@ def add_rss_subscribe(mtype, name, year,
                                     rss_pix=rss_pix,
                                     rss_team=rss_team,
                                     rss_rule=rss_rule,
-                                    match=match)
+                                    match=match,
+                                    total_ep=total_ep,
+                                    current_ep=current_ep)
 
     return 0, "添加订阅成功", media_info
+
+
+def finish_rss_subscribe(rtype, rssid, media):
+    """
+    完成订阅
+    :param rtype: 订阅类型
+    :param rssid: 订阅ID
+    :param media: 识别的媒体信息，发送消息使用
+    """
+    if not rtype or not rssid or not media:
+        return
+    # 电影订阅
+    if rtype == "MOV":
+        # 查询电影RSS数据
+        rss = SqlHelper.get_rss_movies(rssid=rssid)
+        if not rss:
+            return
+        # 登记订阅历史
+        SqlHelper.insert_rss_history(rssid=rssid,
+                                     rtype=rtype,
+                                     name=rss[0][0],
+                                     year=rss[0][1],
+                                     tmdbid=rss[0][2],
+                                     image=media.get_poster_image(),
+                                     desc=media.overview)
+
+        # 删除订阅
+        SqlHelper.delete_rss_movie(rssid=rssid)
+
+    # 电视剧订阅
+    else:
+        # 查询电视剧RSS数据
+        rss = SqlHelper.get_rss_tvs(rssid=rssid)
+        if not rss:
+            return
+        # 解析RSS属性
+        rss_info = Torrent.get_rss_note_item(rss[0][5])
+        total_ep = rss_info.get("episode_info", {}).get("total")
+        start_ep = rss_info.get("episode_info", {}).get("current")
+        # 登记订阅历史
+        SqlHelper.insert_rss_history(rssid=rssid,
+                                     rtype=rtype,
+                                     name=rss[0][0],
+                                     year=rss[0][1],
+                                     season=rss[0][2],
+                                     tmdbid=rss[0][3],
+                                     image=media.get_poster_image(),
+                                     desc=media.overview,
+                                     total=total_ep if total_ep else rss[0][6],
+                                     start=start_ep)
+        # 删除订阅
+        SqlHelper.delete_rss_tv(rssid=rssid)
+
+    # 发送订阅完成的消息
+    if media:
+        Message().send_rss_finished_message(media_info=media)

@@ -156,6 +156,7 @@ class SqlHelper:
                                             StringUtils.str_sql(media_info.year),
                                             media_info.get_season_string(),
                                             media_info.get_episode_string()))
+
     @staticmethod
     def simple_insert_rss_torrents(title, enclosure):
         """
@@ -164,7 +165,7 @@ class SqlHelper:
         sql = "INSERT INTO RSS_TORRENTS(TORRENT_NAME, ENCLOSURE) " \
               "VALUES (?, ?)"
         return MainDb().update_by_sql(sql, (title, enclosure))
-    
+
     @staticmethod
     def simple_delete_rss_torrents(title, enclosure):
         """
@@ -172,7 +173,6 @@ class SqlHelper:
         """
         sql = "DELETE FROM RSS_TORRENTS WHERE TORRENT_NAME = ? AND ENCLOSURE = ?"
         return MainDb().update_by_sql(sql, (title, enclosure))
-        
 
     @staticmethod
     def insert_douban_media_state(media, state):
@@ -502,10 +502,14 @@ class SqlHelper:
                                             tid))
 
     @staticmethod
-    def get_config_filter_group():
+    def get_config_filter_group(gid=None):
         """
         查询过滤规则组
         """
+        if gid:
+            return MainDb().select_by_sql("SELECT ID,GROUP_NAME,IS_DEFAULT,NOTE "
+                                          "FROM CONFIG_FILTER_GROUP "
+                                          "WHERE ID = ?", (gid,))
         return MainDb().select_by_sql("SELECT ID,GROUP_NAME,IS_DEFAULT,NOTE FROM CONFIG_FILTER_GROUP")
 
     @staticmethod
@@ -542,14 +546,14 @@ class SqlHelper:
                 return MainDb().select_by_sql(sql, (state,))
 
     @staticmethod
-    def get_rss_movie_id(title, year, tmdbid=None):
+    def get_rss_movie_id(title, tmdbid=None):
         """
         获取订阅电影ID
         """
         if not title:
             return ""
-        sql = "SELECT ID FROM RSS_MOVIES WHERE NAME=? AND YEAR = ?"
-        ret = MainDb().select_by_sql(sql, (StringUtils.str_sql(title), StringUtils.str_sql(year)))
+        sql = "SELECT ID FROM RSS_MOVIES WHERE NAME=?"
+        ret = MainDb().select_by_sql(sql, (StringUtils.str_sql(title),))
         if ret:
             return ret[0][0]
         else:
@@ -767,7 +771,9 @@ class SqlHelper:
                       rss_pix=None,
                       rss_team=None,
                       rss_rule=None,
-                      match=False
+                      match=False,
+                      total_ep=None,
+                      current_ep=None
                       ):
         """
         新增RSS电视剧
@@ -790,7 +796,9 @@ class SqlHelper:
                          "@".join([StringUtils.str_sql(rss_restype),
                                    StringUtils.str_sql(rss_pix),
                                    StringUtils.str_sql(rss_rule),
-                                   StringUtils.str_sql(rss_team)])])
+                                   StringUtils.str_sql(rss_team)]),
+                         "@".join([StringUtils.str_sql(total_ep),
+                                   StringUtils.str_sql(current_ep)])])
         return MainDb().update_by_sql(sql, (StringUtils.str_sql(media_info.title),
                                             StringUtils.str_sql(media_info.year),
                                             season_str,
@@ -1618,9 +1626,26 @@ class SqlHelper:
         """
         if default == 'Y':
             SqlHelper.set_default_filtergroup(0)
-        sql = "INSERT INTO CONFIG_FILTER_GROUP (GROUP_NAME, IS_DEFAULT) VALUES (?, ?)"
-        MainDb().update_by_sql(sql, (StringUtils.str_sql(name), default))
+        group_id = SqlHelper.get_filter_groupid_by_name(name)
+        if group_id:
+            MainDb().update_by_sql("UPDATE CONFIG_FILTER_GROUP "
+                                   "SET IS_DEFAULT = ? "
+                                   "WHERE ID = ?",
+                                   (default, group_id))
+        else:
+            MainDb().update_by_sql("INSERT INTO CONFIG_FILTER_GROUP "
+                                   "(GROUP_NAME, IS_DEFAULT) "
+                                   "VALUES (?, ?)",
+                                   (StringUtils.str_sql(name), default))
         return True
+
+    @staticmethod
+    def get_filter_groupid_by_name(name):
+        ret = MainDb().select_by_sql("SELECT ID FROM CONFIG_FILTER_GROUP "
+                                     "WHERE GROUP_NAME = ?",
+                                     (name,))
+        if ret and ret[0][0]:
+            return ret[0][0]
 
     @staticmethod
     def set_default_filtergroup(groupid):
@@ -1651,7 +1676,7 @@ class SqlHelper:
         return MainDb().update_by_sql(sql, (ruleid,))
 
     @staticmethod
-    def insert_filter_rule(ruleid, item):
+    def insert_filter_rule(item, ruleid=None):
         """
         新增规则
         """
@@ -1804,3 +1829,280 @@ class SqlHelper:
               "FROM USERRSS_TASK_HISTORY " \
               "WHERE TASK_ID = ? "
         return MainDb().select_by_sql(sql, (task_id,))
+    
+    @staticmethod
+    def insert_ignored_word(ignored, enabled):
+        """
+        增加自定义识别词-屏蔽词
+        """
+        sql = "INSERT INTO IGNORED_WORDS(IGNORED, ENABLED) " \
+              "VALUES (?, ?)"
+        return MainDb().update_by_sql(sql, (ignored, int(enabled))) 
+    
+    @staticmethod
+    def insert_replaced_word(replaced, replace, enabled):
+        """
+        增加自定义识别词-替换词
+        """
+        sql = "INSERT INTO REPLACED_WORDS(REPLACED, REPLACE, ENABLED) " \
+              "VALUES (?, ?, ?)"
+        return MainDb().update_by_sql(sql, (replaced, replace, int(enabled)))
+
+    @staticmethod
+    def insert_offset_word(front, back, offset, enabled, replaced_word_id):
+        """
+        增加自定义识别词-集数偏移
+        """
+        sql = "INSERT INTO OFFSET_WORDS(FRONT, BACK, OFFSET, ENABLED, REPLACED_WORD_ID) " \
+              "VALUES (?, ?, ?, ?, ?)"
+        return MainDb().update_by_sql(sql, (front, back, offset, int(enabled), int(replaced_word_id)))
+
+    @staticmethod
+    def edit_replaced_word(id, replaced, replace, enabled):
+        """
+        编辑自定义识别词-替换词
+        """
+        return MainDb().update_by_sql("UPDATE REPLACED_WORDS "
+                                      "SET REPLACED=?,REPLACE=?,ENABLED=? "
+                                      "WHERE ID=?", (replaced,
+                                                     replace,
+                                                     int(enabled),
+                                                     int(id))) 
+
+    @staticmethod
+    def is_ignored_word_existed(ignored):
+        """
+        查询自定义识别词-屏蔽词
+        """
+        if not ignored:
+            return False
+        sql = "SELECT COUNT(1) FROM IGNORED_WORDS WHERE IGNORED = ?"
+        ret = MainDb().select_by_sql(sql, (ignored,))
+        if ret and ret[0][0] > 0:
+            return True
+        else:
+            return False
+    
+    @staticmethod
+    def is_replaced_word_existed(replaced):
+        """
+        查询自定义识别词-替换词
+        """
+        if not replaced:
+            return False
+        sql = "SELECT COUNT(1) FROM REPLACED_WORDS WHERE REPLACED = ?"
+        ret = MainDb().select_by_sql(sql, (replaced,))
+        if ret and ret[0][0] > 0:
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def is_offset_word_existed(front, back):
+        """
+        查询自定义识别词-集数偏移词
+        """
+        if not front or not back:
+            return False
+        sql = "SELECT COUNT(1) FROM OFFSET_WORDS WHERE FRONT = ? AND BACK = ?"
+        ret = MainDb().select_by_sql(sql, (front, back))
+        if ret and ret[0][0] > 0:
+            return True
+        else:
+            return False
+    
+    @staticmethod
+    def delete_all_ignored_words():
+        """
+        删除所有自定义识别词-屏蔽词
+        """
+        return MainDb().update_by_sql("DELETE FROM IGNORED_WORDS")
+    
+    @staticmethod
+    def delete_all_replaced_words():
+        """
+        删除所有自定义识别词-替换词
+        """
+        return MainDb().update_by_sql("DELETE FROM REPLACED_WORDS")
+    
+    @staticmethod
+    def delete_all_offset_words():
+        """
+        删除所有自定义识别词-集数偏移
+        """
+        return MainDb().update_by_sql("DELETE FROM OFFSET_WORDS")
+    
+    @staticmethod
+    def delete_ignored_word(wid):
+        """
+        删除自定义识别词-屏蔽词
+        """
+        if not id:
+            return False
+        return MainDb().update_by_sql(
+            "DELETE FROM IGNORED_WORDS WHERE ID = ?", (int(wid),))
+    
+    @staticmethod
+    def delete_replaced_word(wid):
+        """
+        删除自定义识别词-替换词
+        """
+        if not wid:
+            return False
+        return MainDb().update_by_sql(
+            "DELETE FROM REPLACED_WORDS WHERE ID = ?", (int(wid),))
+    
+    @staticmethod
+    def delete_offset_word(wid):
+        """
+        删除自定义识别词-集数偏移
+        """
+        if not wid:
+            return False
+        return MainDb().update_by_sql(
+            "DELETE FROM OFFSET_WORDS WHERE ID = ?", (int(wid),))
+
+    @staticmethod
+    def get_ignored_words():
+        """
+        查询所有自定义识别词-屏蔽词
+        """
+        return MainDb().select_by_sql("SELECT ID, IGNORED, ENABLED FROM IGNORED_WORDS")
+    
+    @staticmethod
+    def get_replaced_words():
+        """
+        查询所有自定义识别词-替换词
+        """
+        return MainDb().select_by_sql("SELECT ID, REPLACED, REPLACE, ENABLED FROM REPLACED_WORDS")
+    
+    @staticmethod
+    def get_offset_words():
+        """
+        查询所有自定义识别词-集数偏移
+        """
+        return MainDb().select_by_sql("SELECT ID, FRONT, BACK, OFFSET, ENABLED, REPLACED_WORD_ID FROM OFFSET_WORDS")
+    
+    @staticmethod
+    def check_ignored_word(enabled, wid):
+        """
+        设置自定义识别词-屏蔽词状态
+        """
+        return MainDb().update_by_sql("UPDATE IGNORED_WORDS SET ENABLED = ? WHERE ID = ?", (int(enabled), int(wid)))
+
+    @staticmethod
+    def check_replaced_word(enabled, wid):
+        """
+        设置自定义识别词-替换词状态
+        """
+        return MainDb().update_by_sql("UPDATE REPLACED_WORDS SET ENABLED = ? WHERE ID = ?", (int(enabled), int(wid)))
+    
+    @staticmethod
+    def check_offset_word(enabled, wid):
+        """
+        设置自定义识别词-集数偏移状态
+        """
+        return MainDb().update_by_sql("UPDATE OFFSET_WORDS SET ENABLED = ? WHERE ID = ?", (int(enabled), int(wid)))
+
+    @staticmethod
+    def get_replaced_word_id_by_replaced_word(replaced_word):
+        """
+        根据被替换词查询替换词id
+        """
+        if not replaced_word or replaced_word == "None":
+            return -1
+        else:
+            id = MainDb().select_by_sql("SELECT ID FROM REPLACED_WORDS WHERE REPLACED = ?", (replaced_word,))
+            if id:
+                return id[0][0]
+            else:
+                return -1
+    
+    @staticmethod
+    def get_ignored_words_enable():
+        """
+        查询启用的屏蔽词
+        """
+        return MainDb().select_by_sql("SELECT ID, IGNORED FROM IGNORED_WORDS WHERE ENABLED =1")
+
+    @staticmethod
+    def get_replaced_words_enable_with_offset():
+        """
+        查询启用的替换词及有关联的集数偏移
+        """
+        return MainDb().select_by_sql("SELECT REPLACED_WORDS.ID, REPLACED, REPLACE, FRONT, BACK, OFFSET, OFFSET_WORDS.ENABLED "
+                                      "FROM REPLACED_WORDS LEFT JOIN OFFSET_WORDS "
+                                      "ON REPLACED_WORDS.ID = OFFSET_WORDS.REPLACED_WORD_ID "
+                                      "WHERE REPLACED_WORDS.ENABLED = 1")
+    
+    @staticmethod
+    def get_offset_words_related():
+        """
+        查询设置关联被替换词的集数偏移
+        """
+        return MainDb().select_by_sql("SELECT ID, FRONT, BACK, OFFSET, ENABLED, REPLACED_WORD_ID "
+                                      "FROM OFFSET_WORDS "
+                                      "WHERE REPLACED_WORD_ID != -1")
+    
+    @staticmethod
+    def get_offset_words_unrelated_enable():
+        """
+        查询未设置关联被替换词且启用的集数偏移
+        """
+        return MainDb().select_by_sql("SELECT ID, FRONT, BACK, OFFSET FROM OFFSET_WORDS WHERE REPLACED_WORD_ID = -1 AND ENABLED = 1")
+    
+    @staticmethod
+    def get_replaced_word(wid):
+        """
+        查询自定义识别词-替换词
+        """
+        return MainDb().select_by_sql("SELECT ID, REPLACED, REPLACE, ENABLED FROM REPLACED_WORDS WHERE ID = ?", (int(wid),))
+
+    @staticmethod
+    def get_rss_history(rtype=None, rid=None):
+        sql = "SELECT ID, TYPE, RSSID, NAME, YEAR, TMDBID, SEASON, IMAGE, DESC, TOTAL, START, FINISH_TIME, NOTE " \
+                  "FROM RSS_HISTORY "
+        if rid:
+            sql += "WHERE ID = ?"
+            return MainDb().select_by_sql(sql, (int(rid),))
+        elif rtype:
+            sql += "WHERE TYPE = ?"
+            return MainDb().select_by_sql(sql, (rtype,))
+        return MainDb().select_by_sql(sql)
+
+    @staticmethod
+    def is_exists_rss_history(rssid):
+        if not rssid:
+            return False
+        sql = "SELECT COUNT(1) FROM RSS_HISTORY WHERE RSSID = ?"
+        ret = MainDb().select_by_sql(sql, (rssid,))
+        if ret and ret[0][0] > 0:
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def insert_rss_history(rssid, rtype, name, year, tmdbid, image, desc, season=None, total=None, start=None):
+        if not SqlHelper.is_exists_rss_history(rssid):
+            sql = "INSERT INTO RSS_HISTORY" \
+                  "(TYPE, RSSID, NAME, YEAR, TMDBID, SEASON, IMAGE, DESC, TOTAL, START, FINISH_TIME) " \
+                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            return MainDb().update_by_sql(sql, (rtype,
+                                                rssid,
+                                                name,
+                                                year,
+                                                tmdbid,
+                                                season,
+                                                image,
+                                                desc,
+                                                total,
+                                                start,
+                                                time.strftime('%Y-%m-%d %H:%M:%S',
+                                                              time.localtime(time.time()))
+                                                ))
+
+    @staticmethod
+    def delete_rss_history(rssid):
+        if not rssid:
+            return False
+        return MainDb().update_by_sql("DELETE FROM RSS_HISTORY WHERE ID = ?", (rssid,))

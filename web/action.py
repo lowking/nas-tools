@@ -1,5 +1,7 @@
+import base64
 import datetime
 import importlib
+import json
 import os.path
 import re
 import shutil
@@ -7,25 +9,27 @@ import signal
 
 from flask_login import logout_user
 from werkzeug.security import generate_password_hash
+from ruamel.yaml import YAML
 
 import cn2an
 import log
+from app.doubansync import DoubanSync
+from app.helper.words_helper import WordsHelper
 from app.indexer import BuiltinIndexer
 from app.media.doubanv2api import DoubanHot
 from app.mediaserver import MediaServer
 from app.rsschecker import RssChecker
 from app.utils import StringUtils, Torrent, EpisodeFormat, RequestUtils, PathUtils, SystemUtils
-from app.helper import ProgressController, ThreadHelper, MetaHelper, ChromeHelper
+from app.helper import ProgressHelper, ThreadHelper, MetaHelper
 from app.utils.types import RMT_MODES
 from config import RMT_MEDIAEXT, Config, TMDB_IMAGE_W500_URL, TMDB_IMAGE_ORIGINAL_URL
 from app.message import Telegram, WeChat, Message, MessageCenter
 from app.brushtask import BrushTask
 from app.downloader import Qbittorrent, Transmission, Downloader
-from app.douban import DouBan
 from app.filterrules import FilterRule
 from app.mediaserver import Emby, Jellyfin, Plex
 from app.rss import Rss
-from app.sites import SiteConf, Sites
+from app.sites import Sites
 from app.subtitle import Subtitle
 from app.media import Category, Media, MetaInfo
 from app.media.doubanv2api import DoubanApi
@@ -126,7 +130,15 @@ class WebAction:
             "list_rss_history": self.__list_rss_history,
             "rss_articles_check": self.__rss_articles_check,
             "rss_articles_download": self.__rss_articles_download,
-            "get_categories": self.__get_categories
+            "edit_custom_words": self.__edit_custom_words,
+            "add_or_edit_custom_word": self.__add_or_edit_custom_word,
+            "delete_custom_word": self.__delete_custom_word,
+            "check_custom_words": self.__check_custom_words,
+            "get_categories": self.__get_categories,
+            "re_rss_history": self.__re_rss_history,
+            "delete_rss_history": self.__delete_rss_history,
+            "share_filtergroup": self.__share_filtergroup,
+            "import_filtergroup": self.__import_filtergroup
         }
 
     def action(self, cmd, data):
@@ -160,12 +172,12 @@ class WebAction:
         if not msg:
             return
         commands = {
-            "/ptr": {"func": Downloader().pt_removetorrents, "desp": "删种"},
-            "/ptt": {"func": Downloader().pt_transfer, "desp": "下载文件转移"},
+            "/ptr": {"func": Downloader().remove_torrents, "desp": "删种"},
+            "/ptt": {"func": Downloader().transfer, "desp": "下载文件转移"},
             "/pts": {"func": Sites().signin, "desp": "站点签到"},
-            "/rst": {"func": Sync().transfer_all_sync, "desp": "监控目录全量同步"},
+            "/rst": {"func": Sync().transfer_all_sync, "desp": "目录同步"},
             "/rss": {"func": Rss().rssdownload, "desp": "RSS订阅"},
-            "/db": {"func": DouBan().sync, "desp": "豆瓣同步"}
+            "/db": {"func": DoubanSync().sync, "desp": "豆瓣同步"}
         }
         command = commands.get(msg)
         if command:
@@ -176,7 +188,7 @@ class WebAction:
                     return
             # 启动服务
             ThreadHelper().start_thread(command.get("func"), ())
-            Message().send_channel_msg(channel=in_from, title="%s 已启动" % command.get("desp"))
+            Message().send_channel_msg(channel=in_from, title="正在运行 %s ..." % command.get("desp"))
         else:
             # 检查用户权限
             if in_from == SearchType.TG and user_id:
@@ -301,12 +313,12 @@ class WebAction:
         启动定时服务
         """
         commands = {
-            "autoremovetorrents": Downloader().pt_removetorrents,
-            "pttransfer": Downloader().pt_transfer,
+            "autoremovetorrents": Downloader().remove_torrents,
+            "pttransfer": Downloader().transfer,
             "ptsignin": Sites().signin,
             "sync": Sync().transfer_all_sync,
             "rssdownload": Rss().rssdownload,
-            "douban": DouBan().sync
+            "douban": DoubanSync().sync
         }
         sch_item = data.get("item")
         if sch_item and commands.get(sch_item):
@@ -357,13 +369,11 @@ class WebAction:
                                    upload_volume_factor=float(res[15]),
                                    download_volume_factor=float(res[16]))
             # 添加下载
-            ret, ret_msg = Downloader().add_pt_torrent(media_info=media,
-                                                       download_dir=dl_dir)
+            ret, ret_msg = Downloader().download(media_info=media,
+                                                 download_dir=dl_dir)
             if ret:
                 # 发送消息
                 Message().send_download_message(SearchType.WEB, media)
-                # 登记下载历史
-                SqlHelper.insert_download_history(media)
             else:
                 return {"retcode": -1, "retmsg": ret_msg}
         return {"retcode": 0, "retmsg": ""}
@@ -391,13 +401,11 @@ class WebAction:
         media.download_volume_factor = float(downloadvolumefactor)
         media.seeders = seeders
         # 添加下载
-        ret, ret_msg = Downloader().add_pt_torrent(media_info=media,
-                                                   download_dir=dl_dir)
+        ret, ret_msg = Downloader().download(media_info=media,
+                                             download_dir=dl_dir)
         if ret:
             # 发送消息
             Message().send_download_message(SearchType.WEB, media)
-            # 登记下载历史
-            SqlHelper.insert_download_history(media)
             return {"code": 0, "msg": "下载成功"}
         else:
             return {"code": 1, "msg": ret_msg or "如连接正常，请检查下载任务是否存在"}
@@ -778,6 +786,7 @@ class WebAction:
                                                rss_uses=rss_uses)
         # 生效站点配置
         Sites().init_config()
+
         return {"code": ret}
 
     @staticmethod
@@ -792,7 +801,7 @@ class WebAction:
         if tid:
             ret = Sites().get_sites(siteid=tid)
             if ret.get("rssurl"):
-                site_attr = SiteConf().get_grapsite_conf(ret.get("rssurl"))
+                site_attr = Sites().get_grapsite_conf(ret.get("rssurl"))
                 if site_attr.get("FREE"):
                     site_free = True
                 if site_attr.get("2XFREE"):
@@ -871,7 +880,6 @@ class WebAction:
         category_reload = False
         subtitle_reload = False
         sites_reload = False
-        chrome_reload = False
         # 修改配置
         for key, value in cfgs:
             if key == "test" and value:
@@ -898,8 +906,6 @@ class WebAction:
                 subtitle_reload = True
             if key.startswith("message.switch"):
                 sites_reload = True
-            if key.startswith("laboratory.chrome_browser"):
-                chrome_reload = True
         # 保存配置
         if not config_test:
             self.config.save_config(cfg)
@@ -931,9 +937,6 @@ class WebAction:
         # 重载站点
         if sites_reload:
             Sites().init_config()
-        # 重载浏览器
-        if chrome_reload:
-            ChromeHelper().init_config()
 
         return {"code": 0}
 
@@ -997,6 +1000,8 @@ class WebAction:
         rss_team = data.get("rss_team")
         rss_rule = data.get("rss_rule")
         rssid = data.get("rssid")
+        total_ep = data.get("total_ep")
+        current_ep = data.get("current_ep")
         if name and mtype:
             if mtype in ['nm', 'hm', 'dbom', 'dbhm', 'dbnm', 'dbtop', 'MOV', '电影']:
                 mtype = MediaType.MOVIE
@@ -1038,10 +1043,12 @@ class WebAction:
                                                       rss_pix=rss_pix,
                                                       rss_team=rss_team,
                                                       rss_rule=rss_rule,
-                                                      rssid=rssid)
+                                                      rssid=rssid,
+                                                      total_ep=total_ep,
+                                                      current_ep=current_ep)
         if not rssid:
             if mtype == MediaType.MOVIE:
-                rssid = SqlHelper.get_rss_movie_id(title=name, year=year, tmdbid=tmdbid or "DB:%s" % doubanid)
+                rssid = SqlHelper.get_rss_movie_id(title=name, tmdbid=tmdbid or "DB:%s" % doubanid)
             else:
                 rssid = SqlHelper.get_rss_tv_id(title=name, tmdbid=tmdbid or "DB:%s" % doubanid)
         return {"code": code, "msg": msg, "page": page, "name": name, "rssid": rssid}
@@ -1119,7 +1126,7 @@ class WebAction:
 
             # 查订阅信息
             if not rssid:
-                rssid = SqlHelper.get_rss_movie_id(title=title, year=year, tmdbid=tmdbid or "DB:%s" % doubanid)
+                rssid = SqlHelper.get_rss_movie_id(title=title, tmdbid=tmdbid or "DB:%s" % doubanid)
 
             # 查下载信息
 
@@ -1407,34 +1414,36 @@ class WebAction:
     def __rss_detail(data):
         rssid = data.get("rssid")
         rsstype = data.get("rsstype")
-        if rsstype in ["MOV", "电影"]:
+        if rsstype in ['nm', 'hm', 'dbom', 'dbhm', 'dbnm', 'dbtop', 'MOV', '电影']:
             rss = SqlHelper.get_rss_movies(rssid=rssid)
             if not rss:
                 return {"code": 1}
-            r_sites, s_sites, over_edition, filter_map = Torrent.get_rss_note_item(rss[0][4])
+            rss_info = Torrent.get_rss_note_item(rss[0][4])
             rssdetail = {"rssid": rssid,
                          "name": rss[0][0],
                          "year": rss[0][1],
                          "tmdbid": rss[0][2],
-                         "r_sites": r_sites,
-                         "s_sites": s_sites,
-                         "over_edition": over_edition,
-                         "filter": filter_map,
+                         "r_sites": rss_info.get("rss_sites"),
+                         "s_sites": rss_info.get("search_sites"),
+                         "over_edition": rss_info.get("over_edition"),
+                         "filter": rss_info.get("filter_map"),
                          "type": "MOV"}
         else:
             rss = SqlHelper.get_rss_tvs(rssid=rssid)
             if not rss:
                 return {"code": 1}
-            r_sites, s_sites, over_edition, filter_map = Torrent.get_rss_note_item(rss[0][5])
+            rss_info = Torrent.get_rss_note_item(rss[0][5])
             rssdetail = {"rssid": rssid,
                          "name": rss[0][0],
                          "year": rss[0][1],
                          "season": rss[0][2],
                          "tmdbid": rss[0][3],
-                         "r_sites": r_sites,
-                         "s_sites": s_sites,
-                         "over_edition": over_edition,
-                         "filter": filter_map,
+                         "r_sites": rss_info.get("rss_sites"),
+                         "s_sites": rss_info.get("search_sites"),
+                         "over_edition": rss_info.get("over_edition"),
+                         "filter": rss_info.get("filter_map"),
+                         "total_ep": rss_info.get("episode_info", {}).get("total"),
+                         "current_ep": rss_info.get("episode_info", {}).get("current"),
                          "type": "TV"}
 
         return {"code": 0, "detail": rssdetail}
@@ -1846,7 +1855,7 @@ class WebAction:
             "size": data.get("rule_sizelimit"),
             "free": data.get("rule_free")
         }
-        SqlHelper.insert_filter_rule(rule_id, item)
+        SqlHelper.insert_filter_rule(ruleid=rule_id, item=item)
         FilterRule().init_config()
         return {"code": 0}
 
@@ -1925,7 +1934,7 @@ class WebAction:
                 name = MetaInfo(title).get_name()
                 if RecommendType not in ['hm', 'nm']:
                     rid = "DB:%s" % rid
-                rssid = SqlHelper.get_rss_movie_id(title=name, year=year, tmdbid=rid)
+                rssid = SqlHelper.get_rss_movie_id(title=name, tmdbid=rid)
                 if rssid:
                     # 已订阅
                     fav = 1
@@ -1986,11 +1995,11 @@ class WebAction:
     def parse_sites_string(notes):
         if not notes:
             return ""
-        rss_sites, search_sites, _, _ = Torrent.get_rss_note_item(notes)
+        rss_info = Torrent.get_rss_note_item(notes)
         rss_site_htmls = ['<span class="badge bg-lime me-1 mb-1" title="订阅站点">%s</span>' % s for s in
-                          rss_sites if s]
+                          rss_info.get("rss_sites") if s]
         search_site_htmls = ['<span class="badge bg-yellow me-1 mb-1" title="搜索站点">%s</span>' % s for s in
-                             search_sites if s]
+                             rss_info.get("search_sites") if s]
 
         return "".join(rss_site_htmls) + "".join(search_site_htmls)
 
@@ -1998,22 +2007,26 @@ class WebAction:
     def parse_filter_string(notes):
         if not notes:
             return ""
-        _, _, over_edition, filter_map = Torrent.get_rss_note_item(notes)
+        rss_info = Torrent.get_rss_note_item(notes)
         filter_htmls = []
-        if over_edition:
+        if rss_info.get("over_edition"):
             filter_htmls.append('<span class="badge badge-outline text-red me-1 mb-1" title="已开启洗版">洗版</span>')
-        if filter_map.get("restype"):
+        if rss_info.get("filter_map") and rss_info.get("filter_map").get("restype"):
             filter_htmls.append(
-                '<span class="badge badge-outline text-orange me-1 mb-1">%s</span>' % filter_map.get("restype"))
-        if filter_map.get("pix"):
+                '<span class="badge badge-outline text-orange me-1 mb-1">%s</span>' % rss_info.get("filter_map").get(
+                    "restype"))
+        if rss_info.get("filter_map") and rss_info.get("filter_map").get("pix"):
             filter_htmls.append(
-                '<span class="badge badge-outline text-orange me-1 mb-1">%s</span>' % filter_map.get("pix"))
-        if filter_map.get("team"):
+                '<span class="badge badge-outline text-orange me-1 mb-1">%s</span>' % rss_info.get("filter_map").get(
+                    "pix"))
+        if rss_info.get("filter_map") and rss_info.get("filter_map").get("team"):
             filter_htmls.append(
-                '<span class="badge badge-outline text-blue me-1 mb-1">%s</span>' % filter_map.get("team"))
-        if filter_map.get("rule"):
+                '<span class="badge badge-outline text-blue me-1 mb-1">%s</span>' % rss_info.get("filter_map").get(
+                    "team"))
+        if rss_info.get("filter_map") and rss_info.get("filter_map").get("rule"):
             filter_htmls.append('<span class="badge badge-outline text-orange me-1 mb-1">%s</span>' %
-                                FilterRule().get_rule_groups(groupid=filter_map.get("rule")).get("name") or "")
+                                FilterRule().get_rule_groups(groupid=rss_info.get("filter_map").get("rule")).get(
+                                    "name") or "")
         return "".join(filter_htmls)
 
     @staticmethod
@@ -2128,7 +2141,7 @@ class WebAction:
         """
         检查站点标识
         """
-        site_attr = SiteConf().get_grapsite_conf(data.get("url"))
+        site_attr = Sites().get_grapsite_conf(data.get("url"))
         site_free = site_2xfree = site_hr = False
         if site_attr.get("FREE"):
             site_free = True
@@ -2143,7 +2156,7 @@ class WebAction:
         """
         刷新进度条
         """
-        detail = ProgressController().get_process(data.get("type"))
+        detail = ProgressHelper().get_process(data.get("type"))
         if detail:
             return {"code": 0, "value": detail.get("value"), "text": detail.get("text")}
         else:
@@ -2336,7 +2349,7 @@ class WebAction:
             return {"code": 0, "data": downloads, "count": count}
         else:
             return {"code": 1, "msg": "无下载记录"}
-    
+
     @staticmethod
     def __rss_articles_check(data):
         if not data.get("articles"):
@@ -2346,7 +2359,7 @@ class WebAction:
             return {"code": 0}
         else:
             return {"code": 1}
-    
+
     @staticmethod
     def __rss_articles_download(data):
         if not data.get("articles"):
@@ -2358,6 +2371,132 @@ class WebAction:
             return {"code": 1}
 
     @staticmethod
+    def __edit_custom_words(data):
+        try:
+            custom_words = YAML().load(data)
+            ignored_words = custom_words.get("屏蔽词")
+            SqlHelper.delete_all_ignored_words()
+            if ignored_words:
+                ignored_words = list(set(ignored_words))
+                for ignored_word in ignored_words:
+                    ignored_word = ignored_word.split("@")
+                    SqlHelper.insert_ignored_word(ignored_word[0], 1 if ignored_word[1] == "True" else 0)
+            replaced_words = custom_words.get("替换词")
+            SqlHelper.delete_all_replaced_words()
+            if replaced_words:
+                replaced_words = list(set(replaced_words))
+                for replaced_word in replaced_words:
+                    replaced_word = replaced_word.split("@")
+                    SqlHelper.insert_replaced_word(replaced_word[0], replaced_word[1],
+                                                   1 if replaced_word[2] == "True" else 0)
+            offset_words = custom_words.get("集数偏移")
+            SqlHelper.delete_all_offset_words()
+            if offset_words:
+                offset_words = list(set(offset_words))
+                for offset_word in offset_words:
+                    offset_word = offset_word.split("@")
+                    replaced_word_id = SqlHelper.get_replaced_word_id_by_replaced_word(offset_word[4])
+                    print(replaced_word_id)
+                    SqlHelper.insert_offset_word(offset_word[0], offset_word[1], offset_word[2],
+                                                 1 if offset_word[3] == "True" else 0, replaced_word_id)
+            WordsHelper().init_config()
+            return {"code": 0, "msg": ""}
+        except Exception as e:
+            print(str(e))
+            return {"code": 1, "msg": "输入不符合YAML格式"}
+
+    @staticmethod
+    def __add_or_edit_custom_word(data):
+        flag = data.get("flag")
+        id = data.get("id")
+        custom_word = data.get("custom_word")
+        if flag == "ignored":
+            if id:
+                SqlHelper.delete_ignored_word(id)
+            if not SqlHelper.is_ignored_word_existed(custom_word[0]):
+                SqlHelper.insert_ignored_word(custom_word[0], 1 if custom_word[1] == "True" else 0)
+                WordsHelper().init_config()
+                return {"code": 0, "msg": ""}
+            else:
+                return {"code": 1, "msg": "屏蔽词已存在"}
+        elif flag == "replaced":
+            if id:
+                if not SqlHelper.is_replaced_word_existed(custom_word[0]):
+                    SqlHelper.edit_replaced_word(id, custom_word[0], custom_word[1],
+                                                 1 if custom_word[2] == "True" else 0)
+                    WordsHelper().init_config()
+                    return {"code": 0, "msg": ""}
+                else:
+                    old_replaced_word = SqlHelper.get_replaced_word(id)[0]
+                    if custom_word[0] == old_replaced_word[1] and custom_word[1] != old_replaced_word[2]:
+                        SqlHelper.edit_replaced_word(id, custom_word[0], custom_word[1],
+                                                     1 if custom_word[2] == "True" else 0)
+                        WordsHelper().init_config()
+                        return {"code": 0, "msg": ""}
+                    else:
+                        return {"code": 1, "msg": "替换词已存在"}
+            else:
+                if not SqlHelper.is_replaced_word_existed(custom_word[0]):
+                    SqlHelper.insert_replaced_word(custom_word[0], custom_word[1], 1 if custom_word[2] == "True" else 0)
+                    WordsHelper().init_config()
+                    return {"code": 0, "msg": ""}
+                else:
+                    return {"code": 1, "msg": "替换词已存在"}
+        elif flag == "offset":
+            if id:
+                SqlHelper.delete_offset_word(id)
+            if not SqlHelper.is_offset_word_existed(custom_word[0], custom_word[1]):
+                SqlHelper.insert_offset_word(custom_word[0], custom_word[1], custom_word[2],
+                                             1 if custom_word[3] == "True" else 0, custom_word[4])
+                WordsHelper().init_config()
+                return {"code": 0, "msg": ""}
+            else:
+                return {"code": 1, "msg": "集数偏移已存在"}
+
+    @staticmethod
+    def __delete_custom_word(data):
+        flag = data.get("flag")
+        id = data.get("id")
+        if flag == "ignored":
+            SqlHelper.delete_ignored_word(id)
+            WordsHelper().init_config()
+            return {"code": 0}
+        elif flag == "replaced":
+            SqlHelper.delete_replaced_word(id)
+            WordsHelper().init_config()
+            return {"code": 0}
+        elif flag == "offset":
+            SqlHelper.delete_offset_word(id)
+            WordsHelper().init_config()
+            return {"code": 0}
+        else:
+            return {"code": 1}
+
+    @staticmethod
+    def __check_custom_words(data):
+        try:
+            flag_dict = {"enable": 1, "disable": 0}
+            flag = data.get("flag")
+            custom_words = data.get("custom_words")
+            ignored_words = custom_words.get("ignored_words")
+            if ignored_words:
+                for ignored_word_id in ignored_words:
+                    SqlHelper.check_ignored_word(flag_dict.get(flag), ignored_word_id)
+            replaced_words = custom_words.get("replaced_words")
+            if replaced_words:
+                for replaced_word_id in replaced_words:
+                    SqlHelper.check_replaced_word(flag_dict.get(flag), replaced_word_id)
+            offset_words = custom_words.get("offset_words")
+            if offset_words:
+                for offset_word_id in offset_words:
+                    SqlHelper.check_offset_word(flag_dict.get(flag), offset_word_id)
+            WordsHelper().init_config()
+            return {"code": 0, "msg": ""}
+        except Exception as e:
+            print(str(e))
+            return {"code": 1, "msg": "自定义识别词状态设置失败"}
+
+    @staticmethod
     def __get_categories(data):
         if data.get("type") == "电影":
             categories = Category().get_movie_categorys()
@@ -2366,3 +2505,89 @@ class WebAction:
         else:
             categories = Category().get_anime_categorys()
         return {"code": 0, "category": list(categories), "id": data.get("id"), "value": data.get("value")}
+
+    @staticmethod
+    def __delete_rss_history(data):
+        rssid = data.get("rssid")
+        SqlHelper.delete_rss_history(rssid=rssid)
+        return {"code": 0}
+
+    @staticmethod
+    def __re_rss_history(data):
+        rssid = data.get("rssid")
+        rtype = data.get("type")
+        rssinfo = SqlHelper.get_rss_history(rtype=rtype, rid=rssid)
+        if rssinfo:
+            if rtype == "MOV":
+                mtype = MediaType.MOVIE
+            else:
+                mtype = MediaType.TV
+            if rssinfo[0][6]:
+                season = int(str(rssinfo[0][6]).replace("S", ""))
+            else:
+                season = None
+            code, msg, _ = add_rss_subscribe(mtype=mtype,
+                                             name=rssinfo[0][3],
+                                             year=rssinfo[0][4],
+                                             season=season,
+                                             tmdbid=rssinfo[0][5],
+                                             total_ep=rssinfo[0][9],
+                                             current_ep=rssinfo[0][10])
+            return {"code": code, "msg": msg}
+        else:
+            return {"code": 1, "msg": "订阅历史记录不存在"}
+
+    @staticmethod
+    def __share_filtergroup(data):
+        gid = data.get("id")
+        group_info = SqlHelper.get_config_filter_group(gid=gid)
+        if not group_info:
+            return {"code": 1, "msg": "规则组不存在"}
+        group_rules = SqlHelper.get_config_filter_rule(groupid=gid)
+        if not group_rules:
+            return {"code": 1, "msg": "规则组没有对应规则"}
+        rules = []
+        for rule in group_rules:
+            rules.append({
+                "name": rule[2],
+                "pri": rule[3],
+                "include": rule[4],
+                "exclude": rule[5],
+                "size": rule[6],
+                "free": rule[7]
+            })
+        rule_json = {
+            "name": group_info[0][1],
+            "rules": rules
+        }
+        json_string = base64.b64encode(json.dumps(rule_json).encode("utf-8")).decode('utf-8')
+        return {"code": 0, "string": json_string}
+
+    @staticmethod
+    def __import_filtergroup(data):
+        content = data.get("content")
+        try:
+            json_str = base64.b64decode(str(content).encode("utf-8")).decode('utf-8')
+            json_obj = json.loads(json_str)
+            if json_obj:
+                if not json_obj.get("name"):
+                    return {"code": 1, "msg": "数据格式不正确"}
+                SqlHelper.add_filter_group(name=json_obj.get("name"))
+                group_id = SqlHelper.get_filter_groupid_by_name(json_obj.get("name"))
+                if not group_id:
+                    return {"code": 1, "msg": "数据内容不正确"}
+                if json_obj.get("rules"):
+                    for rule in json_obj.get("rules"):
+                        SqlHelper.insert_filter_rule(item={
+                            "group": group_id,
+                            "name": rule.get("name"),
+                            "pri": rule.get("pri"),
+                            "include": rule.get("include"),
+                            "exclude": rule.get("exclude"),
+                            "size": rule.get("size"),
+                            "free": rule.get("free")
+                        })
+                FilterRule().init_config()
+            return {"code": 0, "msg": ""}
+        except Exception as err:
+            return {"code": 1, "msg": "数据格式不正确，%s" % str(err)}

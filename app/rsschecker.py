@@ -5,7 +5,6 @@ import traceback
 import jsonpath
 from apscheduler.schedulers.background import BackgroundScheduler
 from lxml import etree
-from datetime import datetime
 
 import log
 from app.helper import SqlHelper
@@ -14,7 +13,7 @@ from app.media import Media
 from app.message import Message
 from app.searcher import Searcher
 from app.downloader import Downloader
-from app.utils import RequestUtils
+from app.utils import RequestUtils, StringUtils
 from app.utils.commons import singleton
 from app.utils.types import MediaType, SearchType
 from config import Config
@@ -109,7 +108,7 @@ class RssChecker(object):
         if rss_flag:
             self._scheduler.print_jobs()
             self._scheduler.start()
-            log_info("【RUN】自定义订阅服务启动")
+            log_info("自定义订阅服务启动")
 
     def get_rsstask_info(self, taskid=None):
         """
@@ -257,21 +256,19 @@ class RssChecker(object):
         # 添加下载
         if rss_download_torrents:
             for media in rss_download_torrents:
-                ret, ret_msg = self.downloader.add_pt_torrent(media_info=media,
-                                                              is_paused=media.note.get("is_paused"),
-                                                              tag=media.note.get("tags"),
-                                                              download_dir=media.note.get("save_path"),
-                                                              category=media.note.get("category"),
-                                                              content_layout=media.note.get("content_layout"),
-                                                              upload_limit=media.note.get("upload_limit"),
-                                                              download_limit=media.note.get("download_limit"),
-                                                              ratio_limit=media.note.get("ratio_limit"),
-                                                              seeding_time_limit=media.note.get("seeding_time_limit"))
+                ret, ret_msg = self.downloader.download(media_info=media,
+                                                        is_paused=media.note.get("is_paused"),
+                                                        tag=media.note.get("tags"),
+                                                        download_dir=media.note.get("save_path"),
+                                                        category=media.note.get("category"),
+                                                        content_layout=media.note.get("content_layout"),
+                                                        upload_limit=media.note.get("upload_limit"),
+                                                        download_limit=media.note.get("download_limit"),
+                                                        ratio_limit=media.note.get("ratio_limit"),
+                                                        seeding_time_limit=media.note.get("seeding_time_limit"))
                 if ret:
                     self.message.send_download_message(in_from=SearchType.RSS,
                                                        can_item=media)
-                    # 登记下载历史
-                    SqlHelper.insert_download_history(media)
                     # 登记自定义RSS任务下载记录
                     SqlHelper.insert_userrss_task_history(taskid, media.org_string, Downloader().get_type().value)
                 else:
@@ -473,15 +470,7 @@ class RssChecker(object):
                 # 种子大小
                 size = res.get('size')
                 # 发布日期
-                date = res.get('date')
-                if date:
-                    try:
-                        date = datetime.strftime(datetime.strptime(res.get('date'), '%a, %d %b %Y %H:%M:%S %z'),
-                                                 '%Y-%m-%d %H:%M:%S')
-                    except Exception as e:
-                        print(str(e))
-                        date = datetime.strftime(datetime.strptime(res.get('date').split(".")[0], '%Y-%m-%dT%H:%M:%S'),
-                                                 '%Y-%m-%d %H:%M:%S')
+                date = StringUtils.unify_datetime_str(res.get('date'))
                 # 年份
                 year = res.get('year')
                 if year and len(year) > 4:
@@ -596,23 +585,21 @@ class RssChecker(object):
         for article in articles:
             media = self.media.get_media_info(title=article.get("title"))
             media.set_torrent_info(enclosure=article.get("enclosure"))
-            ret, ret_msg = self.downloader.add_pt_torrent(media_info=media,
-                                                          is_paused=taskinfo["note"].get("is_paused"),
-                                                          tag=taskinfo["note"].get("tags"),
-                                                          download_dir=taskinfo["note"].get("save_path"),
-                                                          category=taskinfo["note"].get("category"),
-                                                          content_layout=taskinfo["note"].get("content_layout"),
-                                                          upload_limit=taskinfo["note"].get("upload_limit"),
-                                                          download_limit=taskinfo["note"].get("download_limit"),
-                                                          ratio_limit=taskinfo["note"].get("ratio_limit"),
-                                                          seeding_time_limit=taskinfo["note"].get("seeding_time_limit"))
+            ret, ret_msg = self.downloader.download(media_info=media,
+                                                    is_paused=taskinfo["note"].get("is_paused"),
+                                                    tag=taskinfo["note"].get("tags"),
+                                                    download_dir=taskinfo["note"].get("save_path"),
+                                                    category=taskinfo["note"].get("category"),
+                                                    content_layout=taskinfo["note"].get("content_layout"),
+                                                    upload_limit=taskinfo["note"].get("upload_limit"),
+                                                    download_limit=taskinfo["note"].get("download_limit"),
+                                                    ratio_limit=taskinfo["note"].get("ratio_limit"),
+                                                    seeding_time_limit=taskinfo["note"].get("seeding_time_limit"))
             if ret:
                 self.message.send_download_message(in_from=SearchType.RSS,
                                                    can_item=media)
                 # 插入数据库
                 SqlHelper.insert_rss_torrents(media)
-                # 登记下载历史
-                SqlHelper.insert_download_history(media)
                 # 登记自定义RSS任务下载记录
                 SqlHelper.insert_userrss_task_history(taskid, media.org_string, Downloader().get_type().value)
             else:
