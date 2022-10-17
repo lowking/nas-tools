@@ -64,10 +64,27 @@ class StringUtils:
         """
         判断是否含有中文
         """
-        for ch in word:
-            if '\u4e00' <= ch <= '\u9fff':
-                return True
-        return False
+        chn = re.compile(r'[\u4e00-\u9fff]')
+        if chn.search(word):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def is_japanese(word):
+        jap = re.compile(r'[\u3040-\u309F\u30A0-\u30FF]')
+        if jap.search(word):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def is_korean(word):
+        kor = re.compile(r'[\uAC00-\uD7FF]')
+        if kor.search(word):
+            return True
+        else:
+            return False
 
     @staticmethod
     def is_all_chinese(word):
@@ -132,7 +149,7 @@ class StringUtils:
         忽略特殊字符
         """
         # 需要忽略的特殊字符
-        CONVERT_EMPTY_CHARS = r"\.|\(|\)|\[|]|-|\+|【|】|/|～|;|&|\||#|_|「|」|（|）|'|’|!|！|,|～|·|:|：|\-"
+        CONVERT_EMPTY_CHARS = r"\.|\(|\)|\[|]|-|\+|【|】|/|～|;|&|\||#|_|「|」|（|）|'|’|!|！|,|～|·|:|：|\-|~"
         if not text:
             return ""
         text = re.sub(r"[\u200B-\u200D\uFEFF]", "", re.sub(r"%s" % CONVERT_EMPTY_CHARS, replace_word, text),
@@ -201,7 +218,7 @@ class StringUtils:
     def clear_file_name(name):
         if not name:
             return None
-        return re.sub(r"[*?\\/\"<>]", "", name, flags=re.IGNORECASE).replace(":", "：")
+        return re.sub(r"[*?\\/\"<>~]", "", name, flags=re.IGNORECASE).replace(":", "：")
 
     @staticmethod
     def get_keyword_from_string(content):
