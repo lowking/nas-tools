@@ -74,6 +74,7 @@ class WebAction:
             "update_system": self.__update_system,
             "logout": self.__logout,
             "update_config": self.__update_config,
+            "update_directory": self.__update_directory,
             "add_or_edit_sync_path": self.__add_or_edit_sync_path,
             "get_sync_path": self.__get_sync_path,
             "delete_sync_path": self.__delete_sync_path,
@@ -2920,7 +2921,7 @@ class WebAction:
                 "free": rule.NOTE
             })
         rule_json = {
-            "name": group_info[0].NAME,
+            "name": group_info[0].GROUP_NAME,
             "rules": rules
         }
         json_string = base64.b64encode(json.dumps(rule_json).encode("utf-8")).decode('utf-8')
@@ -3112,9 +3113,14 @@ class WebAction:
             else:
                 exist_flag = False
             # 结果
+            title_string = f"{item.TITLE}"
+            if item.YEAR:
+                title_string = f"{title_string} ({item.YEAR})"
+            if item.ES_STRING:
+                title_string = f"{title_string} {item.ES_STRING}"
             SearchResults.append({
                 "id": item.ID,
-                "title_string": f"{item.TITLE} ({item.YEAR})" if item.YEAR else f"{item.TITLE}",
+                "title_string": title_string,
                 "restype": item.RES_TYPE,
                 "size": item.SIZE,
                 "seeders": item.SEEDERS,
@@ -3285,7 +3291,7 @@ class WebAction:
         if not CurrentPage:
             CurrentPage = 1
         else:
-            CurrentPage = CurrentPage
+            CurrentPage = int(CurrentPage)
         totalCount, historys = self.dbhelper.get_transfer_history(SearchStr, CurrentPage, PageNum)
 
         TotalPage = floor(totalCount / PageNum) + 1
@@ -3437,3 +3443,16 @@ class WebAction:
             "ruleGroups": RuleGroups,
             "initRules": Init_RuleGroups
         }
+
+    def __update_directory(self, data):
+        """
+        维护媒体库目录
+        """
+        cfg = self.set_config_directory(self.config.get_config(),
+                                        data.get("oper"),
+                                        data.get("key"),
+                                        data.get("value"),
+                                        data.get("replace_value"))
+        # 保存配置
+        self.config.save_config(cfg)
+        return {"code": 0}

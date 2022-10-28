@@ -3,11 +3,10 @@ import signal
 import sys
 from alembic.config import Config as AlembicConfig
 from alembic.command import upgrade as alembic_upgrade
-
-# 添加第三方库入口,按首字母顺序，引入brushtask时涉及第三方库，需提前引入
 from pyvirtualdisplay import Display
 from werkzeug.security import generate_password_hash
 
+# 添加第三方库入口,按首字母顺序，引入brushtask时涉及第三方库，需提前引入
 with open(os.path.join(os.path.dirname(__file__),
                        "third_party.txt"), "r") as f:
     third_party = f.readlines()
@@ -93,11 +92,11 @@ def init_db():
     """
     初始化数据库
     """
-    log.console('【Db】数据库初始化...')
+    log.console('数据库初始化...')
     MediaDb().init_db()
     MainDb().init_db()
     MainDb().init_data()
-    log.console('【Db】数据库初始化已完成')
+    log.console('数据库初始化已完成')
 
 
 def update_db(cfg):
@@ -106,7 +105,7 @@ def update_db(cfg):
     """
     db_location = os.path.normpath(os.path.join(cfg.get_config_path(), 'user.db'))
     script_location = os.path.normpath(os.path.join(os.path.dirname(__file__), 'alembic'))
-    log.console('【Db】数据库更新...')
+    log.console('数据库更新...')
     try:
         alembic_cfg = AlembicConfig()
         alembic_cfg.set_main_option('script_location', script_location)
@@ -114,7 +113,7 @@ def update_db(cfg):
         alembic_upgrade(alembic_cfg, 'head')
     except Exception as e:
         print(str(e))
-    log.console('【Db】数据库更新已完成')
+    log.console('数据库更新已完成')
 
 
 def update_config(cfg):
@@ -125,7 +124,7 @@ def update_config(cfg):
     _config = cfg.get_config()
     overwrite_cofig = False
     # 密码初始化
-    login_password = _config.get("app", {}).get("login_password")
+    login_password = _config.get("app", {}).get("login_password") or "password"
     if login_password and not login_password.startswith("[hash]"):
         _config['app']['login_password'] = "[hash]%s" % generate_password_hash(login_password)
         overwrite_cofig = True
