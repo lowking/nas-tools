@@ -830,15 +830,15 @@ class FileTransfer:
         log.info("【Rmt】%s 处理完成，总数：%s，失败：%s" % (in_path, total_count, failed_count))
         if alert_count > 0:
             self.message.send_transfer_fail_message(in_path, alert_count, "、".join(alert_messages))
-        elif failed_count == 0:
-            # 删除空目录
-            if rmt_mode == RmtMode.MOVE \
-                    and os.path.exists(in_path) \
-                    and os.path.isdir(in_path) \
-                    and not PathUtils.get_dir_files(in_path=in_path, exts=RMT_MEDIAEXT) \
-                    and not PathUtils.get_dir_files(in_path=in_path, exts=['.!qb', '.part']):
-                log.info("【Rmt】目录下已无媒体文件及正在下载的文件，移动模式下删除目录：%s" % in_path)
-                shutil.rmtree(in_path)
+        # elif failed_count == 0:
+        #     # 删除空目录
+        #     if rmt_mode == RmtMode.MOVE \
+        #             and os.path.exists(in_path) \
+        #             and os.path.isdir(in_path) \
+        #             and not PathUtils.get_dir_files(in_path=in_path, exts=RMT_MEDIAEXT) \
+        #             and not PathUtils.get_dir_files(in_path=in_path, exts=['.!qb', '.part']):
+        #         log.info("【Rmt】目录下已无媒体文件及正在下载的文件，移动模式下删除目录：%s" % in_path)
+        #         shutil.rmtree(in_path)
         return success_flag, error_message
 
     def transfer_manually(self, s_path, t_path, mode):
