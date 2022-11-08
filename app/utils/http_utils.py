@@ -1,11 +1,13 @@
 import requests
 import urllib3
-
+from urllib3.exceptions import InsecureRequestWarning
 from config import Config
+
+urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class RequestUtils:
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     __headers = None
     __cookies = None
     __proxies = None
@@ -58,6 +60,7 @@ class RequestUtils:
                                            verify=False,
                                            headers=self.__headers,
                                            proxies=self.__proxies,
+                                           timeout=self.__timeout,
                                            json=json)
             else:
                 return requests.post(url,
@@ -65,6 +68,7 @@ class RequestUtils:
                                      verify=False,
                                      headers=self.__headers,
                                      proxies=self.__proxies,
+                                     timeout=self.__timeout,
                                      json=json)
         except requests.exceptions.RequestException:
             return None
@@ -76,15 +80,15 @@ class RequestUtils:
                                        verify=False,
                                        headers=self.__headers,
                                        proxies=self.__proxies,
-                                       params=params,
-                                       timeout=self.__timeout)
+                                       timeout=self.__timeout,
+                                       params=params)
             else:
                 r = requests.get(url,
                                  verify=False,
                                  headers=self.__headers,
                                  proxies=self.__proxies,
-                                 params=params,
-                                 timeout=self.__timeout)
+                                 timeout=self.__timeout,
+                                 params=params)
             return str(r.content, 'UTF-8')
         except requests.exceptions.RequestException:
             return None
@@ -121,6 +125,7 @@ class RequestUtils:
                                            headers=self.__headers,
                                            proxies=self.__proxies,
                                            cookies=self.__cookies,
+                                           timeout=self.__timeout,
                                            allow_redirects=allow_redirects,
                                            files=files)
             else:
@@ -130,6 +135,7 @@ class RequestUtils:
                                      headers=self.__headers,
                                      proxies=self.__proxies,
                                      cookies=self.__cookies,
+                                     timeout=self.__timeout,
                                      allow_redirects=allow_redirects,
                                      files=files)
         except requests.exceptions.RequestException:

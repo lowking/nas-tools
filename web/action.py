@@ -26,7 +26,6 @@ from app.indexer import BuiltinIndexer
 from app.media import Category, Media, MetaInfo
 from app.media.bangumi import Bangumi
 from app.media.douban import DouBan
-from app.media.doubanv2api import DoubanApi
 from app.mediaserver import Emby, Jellyfin, Plex
 from app.mediaserver import MediaServer
 from app.message import Telegram, WeChat, Message, MessageCenter
@@ -1277,8 +1276,8 @@ class WebAction:
             # 查媒体信息
             if doubanid:
                 link_url = "https://movie.douban.com/subject/%s" % doubanid
-                douban_info = DoubanApi().movie_detail(doubanid)
-                if not douban_info or douban_info.get("localized_message"):
+                douban_info = DouBan().get_douban_detail(doubanid=doubanid, mtype=media_type)
+                if not douban_info:
                     return {
                         "code": 1,
                         "retmsg": "无法查询到豆瓣信息",
@@ -1343,8 +1342,8 @@ class WebAction:
             # 查媒体信息
             if doubanid:
                 link_url = "https://movie.douban.com/subject/%s" % doubanid
-                douban_info = DoubanApi().tv_detail(doubanid)
-                if not douban_info or douban_info.get("localized_message"):
+                douban_info = DouBan().get_douban_detail(doubanid=doubanid, mtype=media_type)
+                if not douban_info:
                     return {
                         "code": 1,
                         "retmsg": "无法查询到豆瓣信息",
@@ -1529,7 +1528,7 @@ class WebAction:
         tid = data.get("id")
         if tid and tid.startswith("DB:"):
             doubanid = tid.replace("DB:", "")
-            douban_info = DoubanApi().movie_detail(doubanid)
+            douban_info = DouBan().get_douban_detail(doubanid=doubanid, mtype=MediaType.MOVIE)
             if not douban_info:
                 return {"code": 1, "retmsg": "无法查询到豆瓣信息"}
             poster_path = douban_info.get("cover_url") or ""
@@ -1583,7 +1582,7 @@ class WebAction:
         name = data.get("name")
         if tid and tid.startswith("DB:"):
             doubanid = tid.replace("DB:", "")
-            douban_info = DoubanApi().tv_detail(doubanid)
+            douban_info = DouBan().get_douban_detail(doubanid=doubanid, mtype=MediaType.TV)
             if not douban_info:
                 return {"code": 1, "retmsg": "无法查询到豆瓣信息"}
             poster_path = douban_info.get("cover_url") or ""
@@ -3222,12 +3221,16 @@ class WebAction:
         SearchWord = data.get("keyword")
         if not SearchWord:
             return []
+        _mediaserver = MediaServer()
         use_douban_titles = Config().get_config("laboratory").get("use_douban_titles")
         if use_douban_titles:
             _, key_word, season_num, episode_num, _, _ = StringUtils.get_keyword_from_string(SearchWord)
             medias = DouBan().search_douban_medias(keyword=key_word,
                                                    season=season_num,
                                                    episode=episode_num)
+            for media in medias:
+                if _mediaserver.check_item_exists(title=media.title, year=media.year, tmdbid=media.tmdb_id):
+                    media.fav = 2
         else:
             meta_info = MetaInfo(title=SearchWord)
             tmdbinfos = Media().get_tmdb_infos(title=meta_info.get_name(), year=meta_info.year, num=20)
@@ -3236,6 +3239,8 @@ class WebAction:
                 tmp_info.set_tmdb_info(tmdbinfo)
                 if meta_info.type == MediaType.TV and tmp_info.type != MediaType.TV:
                     continue
+                if _mediaserver.check_item_exists(title=tmp_info.title, year=tmp_info.year, tmdbid=tmp_info.tmdb_id):
+                    tmp_info.fav = 2
                 if tmp_info.begin_season:
                     tmp_info.title = "%s 第%s季" % (tmp_info.title, cn2an.an2cn(meta_info.begin_season, mode='low'))
                 if tmp_info.begin_episode:
