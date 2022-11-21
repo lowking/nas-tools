@@ -3,7 +3,6 @@ from threading import Lock
 from time import sleep
 
 import zhconv
-from requests.utils import dict_from_cookiejar
 
 from app.utils.commons import singleton
 from app.utils.string_utils import StringUtils
@@ -42,7 +41,7 @@ class DouBan:
                 try:
                     res = RequestUtils(timeout=5).get_res("https://www.douban.com/")
                     if res:
-                        self.cookie = dict_from_cookiejar(res.cookies)
+                        self.cookie = StringUtils.str_from_cookiejar(res.cookies)
                 except Exception as err:
                     log.warn(f"【Douban】获取cookie失败：{format(err)}")
 
@@ -152,6 +151,13 @@ class DouBan:
         for web_info in web_infos:
             web_info["id"] = web_info.get("url").split("/")[-2]
         return web_infos
+
+    def get_user_info(self, userid, wait=False):
+        if wait:
+            time = round(random.uniform(1, 5), 1)
+            log.info("【Douban】随机休眠：%s 秒" % time)
+            sleep(time)
+        return self.doubanweb.user(cookie=self.cookie, userid=userid)
 
     def search_douban_medias(self, keyword, mtype: MediaType = None, num=20, season=None, episode=None):
         """
