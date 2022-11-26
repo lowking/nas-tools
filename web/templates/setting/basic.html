@@ -17,7 +17,7 @@
       <div class="col-md-12">
         <div class="card" id="basic_system">
           <div class="card-header">
-            <h3 class="card-title"><strong>系统</strong><small class="text-red"> * 修改设置后需要重启生效</small></h3>
+            <h3 class="card-title"><strong>系统</strong></h3>
           </div>
           <div class="card-body">
             <div class="row">
@@ -136,7 +136,7 @@
       <div class="col-md-12">
         <div class="card" id="basic_media">
           <div class="card-header">
-            <h3 class="card-title"><strong>媒体</strong><small class="text-red"> * 修改设置后需要重启生效</small></h3>
+            <h3 class="card-title"><strong>媒体</strong></h3>
           </div>
           <div class="card-body">
             <div class="row">
@@ -401,7 +401,7 @@
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="pt.pt_monitor_only" {% if
                       Config.pt.pt_monitor_only %}checked{% endif %}>
-                    <span class="form-check-label">只管理NASTool添加的下载 <span class="form-help"
+                    <span class="form-check-label">只管理NAStool添加的下载 <span class="form-help"
                                                                                  title="启用后只有含NASTOOL标签的下载任务才会被自动转移和显示，关闭则下载软件中所有的任务都会转移和显示；仅支持Qbittorrent、Transmission下载器"
                                                                                  data-bs-toggle="tooltip">?</span></span>
                   </label>
@@ -943,6 +943,7 @@
         $("#" + type + "_btn").attr("disabled", false);
         $("#" + type + "_btn").text("保存");
       }
+      show_success_modal("保存成功，部分设置需要重启才能生效！")
     });
   }
 
