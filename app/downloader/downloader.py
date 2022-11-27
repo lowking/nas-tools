@@ -336,13 +336,15 @@ class Downloader:
                                                                            rmt_mode=self._pt_rmt_mode)
                     if not done_flag:
                         log.warn("【Downloader】%s 转移失败：%s" % (task.get("path"), done_msg))
-                        self.default_client.set_torrents_status(task.get("id"))
+                        self.default_client.set_torrents_status(ids=task.get("id"),
+                                                                tags=task.get("tags"))
                     else:
                         if self._pt_rmt_mode in [RmtMode.MOVE, RmtMode.RCLONE, RmtMode.MINIO]:
                             log.warn("【Downloader】移动模式下删除种子文件：%s" % task.get("id"))
                             self.default_client.delete_torrents(delete_file=True, ids=task.get("id"))
                         else:
-                            self.default_client.set_torrents_status(task.get("id"))
+                            self.default_client.set_torrents_status(ids=task.get("id"),
+                                                                    tags=task.get("tags"))
                 log.info("【Downloader】下载文件转移结束")
             finally:
                 lock.release()
@@ -365,7 +367,7 @@ class Downloader:
             log.info("【Downloader】开始执行做种清理，做种时间：%s..." % StringUtils.str_timelong(self._seeding_time))
             torrents = self.default_client.get_remove_torrents(seeding_time=self._seeding_time, tag=tag)
             for torrent in torrents:
-                self.default_client.delete_torrents(ids=torrent)
+                self.default_client.delete_torrents(delete_file=True, ids=torrent)
             log.info("【Downloader】做种清理完成")
         finally:
             lock.release()
