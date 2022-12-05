@@ -29,6 +29,7 @@ from app.searcher import Searcher
 from app.sites import Sites
 from app.subscribe import Subscribe
 from app.sync import Sync
+from app.torrentremover import TorrentRemover
 from app.utils import DomUtils, SystemUtils, WebUtils
 from app.utils.types import *
 from config import WECHAT_MENU, PT_TRANSFER_INTERVAL, TORRENT_SEARCH_PARAMS, NETTEST_TARGETS, Config
@@ -45,7 +46,7 @@ ConfigLock = Lock()
 # Flask App
 App = Flask(__name__)
 App.config['JSON_AS_ASCII'] = False
-App.secret_key = Config().get_config('security').get("api_key")
+App.secret_key = os.urandom(24)
 App.permanent_session_lifetime = datetime.timedelta(days=30)
 
 # 登录管理模块
@@ -94,7 +95,7 @@ def login():
         跳转到导航页面
         """
         # 判断当前的运营环境
-        SystemFlag = 1 if SystemUtils.get_system() == OsType.LINUX else 0
+        SystemFlag = 0 if SystemUtils.is_windows() else 1
         SyncMod = Config().get_config('pt').get('rmt_mode')
         TMDBFlag = 1 if Config().get_config('app').get('rmt_tmdbkey') else 0
         if not SyncMod:
@@ -477,6 +478,17 @@ def downloaded():
                            Items=Items)
 
 
+@App.route('/torrent_remove', methods=['POST', 'GET'])
+@login_required
+def torrent_remove():
+    TorrentRemoveTasks = TorrentRemover().get_torrent_remove_tasks()
+    DownloaderConfig = TorrentRemover().TORRENTREMOVER_DICT
+    return render_template("download/torrent_remove.html",
+                           DownloaderConfig=DownloaderConfig,
+                           Count=len(TorrentRemoveTasks),
+                           TorrentRemoveTasks=TorrentRemoveTasks)
+
+
 # 数据统计页面
 @App.route('/statistics', methods=['POST', 'GET'])
 @login_required
@@ -645,9 +657,8 @@ def service():
              'color': "green"})
 
         # 删种
-        pt_seeding_config_time = pt.get('pt_seeding_time')
-        if pt_seeding_config_time and pt_seeding_config_time != '0':
-            pt_seeding_time = "%s 天" % pt_seeding_config_time
+        torrent_remove_tasks = TorrentRemover().get_torrent_remove_tasks()
+        if torrent_remove_tasks:
             sta_autoremovetorrents = 'ON'
             svg = '''
             <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-trash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -660,7 +671,7 @@ def service():
             </svg>
             '''
             scheduler_cfg_list.append(
-                {'name': '删种', 'time': pt_seeding_time, 'state': sta_autoremovetorrents,
+                {'name': '自动删种', 'state': sta_autoremovetorrents,
                  'id': 'autoremovetorrents', 'svg': svg, 'color': "twitter"})
 
         # 自动签到
@@ -1131,10 +1142,9 @@ def robots():
 @App.route('/wechat', methods=['GET', 'POST'])
 def wechat():
     # 当前在用的交互渠道
-    interactive_client = Message().get_interactive_client()
-    if not interactive_client or interactive_client.get("search_type") != SearchType.WX:
-        return
-    # 读取配置
+    interactive_client = Message().get_interactive_client(SearchType.WX)
+    if not interactive_client:
+        return make_response("NAStool没有启用微信交互", 200)
     conf = interactive_client.get("config")
     sToken = conf.get('token')
     sEncodingAESKey = conf.get('encodingAESKey')
@@ -1148,7 +1158,7 @@ def wechat():
 
     if request.method == 'GET':
         if not sVerifyMsgSig and not sVerifyTimeStamp and not sVerifyNonce:
-            return "放心吧，服务是正常的！<br>微信回调配置步聚：<br>1、在微信企业应用接收消息设置页面生成Token和EncodingAESKey并填入设置->消息通知->微信对应项。<br>2、保存并重启本工具，保存并重启本工具，保存并重启本工具。<br>3、在微信企业应用接收消息设置页面输入此地址：http(s)://IP:PORT/wechat（IP、PORT替换为本工具的外网访问地址及端口，需要有公网IP并做好端口转发，最好有域名）。"
+            return "NAStool微信交互服务正常！<br>微信回调配置步聚：<br>1、在微信企业应用接收消息设置页面生成Token和EncodingAESKey并填入设置->消息通知->微信对应项，打开微信交互开关。<br>2、保存并重启本工具，保存并重启本工具，保存并重启本工具。<br>3、在微信企业应用接收消息设置页面输入此地址：http(s)://IP:PORT/wechat（IP、PORT替换为本工具的外网访问地址及端口，需要有公网IP并做好端口转发，最好有域名）。"
         sVerifyEchoStr = request.args.get("echostr")
         log.debug("收到微信验证请求: echostr= %s" % sVerifyEchoStr)
         ret, sEchoStr = wxcpt.VerifyURL(sVerifyMsgSig, sVerifyTimeStamp, sVerifyNonce, sVerifyEchoStr)
@@ -1258,7 +1268,7 @@ def emby_webhook():
     return 'Success'
 
 
-# Telegram消息
+# Telegram消息响应
 @App.route('/telegram', methods=['POST', 'GET'])
 def telegram():
     """
@@ -1285,13 +1295,13 @@ def telegram():
     }
     """
     # 当前在用的交互渠道
-    interactive_client = Message().get_interactive_client()
-    if not interactive_client or interactive_client.get("search_type") != SearchType.TG:
-        return 'Reject'
+    interactive_client = Message().get_interactive_client(SearchType.TG)
+    if not interactive_client:
+        return 'NAStool未启用Telegram交互'
     msg_json = request.get_json()
     if not SecurityHelper().check_telegram_ip(request.remote_addr):
         log.error("收到来自 %s 的非法Telegram消息：%s" % (request.remote_addr, msg_json))
-        return 'Reject'
+        return '不允许的IP地址请求'
     if msg_json:
         message = msg_json.get("message", {})
         text = message.get("text")
@@ -1306,6 +1316,29 @@ def telegram():
                                            user_id=user_id,
                                            user_name=user_name)
     return 'Success'
+
+
+# Slack消息响应
+@App.route('/slack', methods=['POST'])
+def slack():
+    """
+    {
+        "token": "Jhj5dZrVaK7ZwHHjRyZWjbDl",
+        "challenge": "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P",
+        "type": "url_verification"
+    }
+    """
+    # 当前在用的交互渠道
+    interactive_client = Message().get_interactive_client(SearchType.SLACK)
+    if not interactive_client:
+        return 'NAStool未启用Slack交互'
+    conf = interactive_client.get("config")
+    verification_token = conf.get("verification_token")
+    msg_json = request.get_json()
+    if msg_json.get("challenge") and msg_json.get("token") == verification_token:
+        return {"challenge": msg_json.get("challenge")}
+    log.info(msg_json)
+    return "非法请求"
 
 
 # Jellyseerr Overseerr订阅接口

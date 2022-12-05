@@ -6,7 +6,7 @@ from app.media.meta.metabase import MetaBase
 from app.utils import StringUtils
 from app.utils.tokens import Tokens
 from app.utils.types import MediaType
-from app.media.meta.release_groups import RELEASE_GROUPS, rg_match
+from app.media.meta.release_groups import ReleaseGroupsMatcher
 
 
 class MetaVideo(MetaBase):
@@ -49,6 +49,7 @@ class MetaVideo(MetaBase):
         super().__init__(title, subtitle, fileflag)
         if not title:
             return
+        original_title = title
         # 判断是否纯数字命名
         if os.path.splitext(title)[-1] in RMT_MEDIAEXT \
                 and os.path.splitext(title)[0].isdigit() \
@@ -113,7 +114,7 @@ class MetaVideo(MetaBase):
         if self.part and self.part.upper() == "PART":
             self.part = None
         # 制作组/字幕组
-        self.resource_team = rg_match(f"{title} ", RELEASE_GROUPS) or None
+        self.resource_team = ReleaseGroupsMatcher().match(title=f"{original_title} ") or None
 
     def __fix_name(self, name):
         if not name:

@@ -1849,7 +1849,8 @@ class DbHelper:
         """
         if not task_id:
             return []
-        return self._db.query(USERRSSTASKHISTORY).filter(USERRSSTASKHISTORY.TASK_ID == task_id).all()
+        return self._db.query(USERRSSTASKHISTORY).filter(USERRSSTASKHISTORY.TASK_ID == task_id)\
+            .order_by(USERRSSTASKHISTORY.DATE.desc()).all()
 
     def get_rss_history(self, rtype=None, rid=None):
         """
@@ -2178,7 +2179,7 @@ class DbHelper:
         ))
 
     @DbPersist(_db)
-    def check_message_client(self, cid=None, interactive=None, enabled=None):
+    def check_message_client(self, cid=None, interactive=None, enabled=None, ctype=None):
         """
         设置目录同步状态
         """
@@ -2194,9 +2195,53 @@ class DbHelper:
                     "ENABLED": int(enabled)
                 }
             )
-        elif not cid and int(interactive) == 0:
-            self._db.query(MESSAGECLIENT).filter(MESSAGECLIENT.INTERACTIVE == 1).update(
+        elif not cid and int(interactive) == 0 and ctype:
+            self._db.query(MESSAGECLIENT).filter(MESSAGECLIENT.INTERACTIVE == 1,
+                                                 MESSAGECLIENT.TYPE == ctype).update(
                 {
                     "INTERACTIVE": 0
                 }
             )
+
+    @DbPersist(_db)
+    def delete_torrent_remove_task(self, tid):
+        """
+        删除自动删种策略
+        """
+        if not tid:
+            return
+        self._db.query(TORRENTREMOVETASK).filter(TORRENTREMOVETASK.ID == int(tid)).delete()
+
+    def get_torrent_remove_tasks(self, tid=None):
+        """
+        查询自动删种策略
+        """
+        if tid:
+            return self._db.query(TORRENTREMOVETASK).filter(TORRENTREMOVETASK.ID == int(tid)).all()
+        return self._db.query(TORRENTREMOVETASK).order_by(TORRENTREMOVETASK.NAME).all()
+
+    @DbPersist(_db)
+    def insert_torrent_remove_task(self,
+                                   name,
+                                   action,
+                                   interval,
+                                   enabled,
+                                   samedata,
+                                   onlynastool,
+                                   downloader,
+                                   config: dict,
+                                   note=None):
+        """
+        设置自动删种策略
+        """
+        self._db.insert(TORRENTREMOVETASK(
+            NAME=name,
+            ACTION=int(action),
+            INTERVAL=int(interval),
+            ENABLED=int(enabled),
+            SAMEDATA=int(samedata),
+            ONLYNASTOOL=int(onlynastool),
+            DOWNLOADER=downloader,
+            CONFIG=json.dumps(config),
+            NOTE=note
+        ))

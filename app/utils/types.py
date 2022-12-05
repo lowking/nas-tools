@@ -29,6 +29,7 @@ class SearchType(Enum):
     OT = "手动下载"
     TG = "Telegram"
     API = "第三方API请求"
+    SLACK = "Slack"
 
 
 class RmtMode(Enum):
@@ -50,6 +51,8 @@ class MatchMode(Enum):
 class OsType(Enum):
     WINDOWS = "Windows"
     LINUX = "Linux"
+    SYNOLOGY = "Synology"
+    MACOS = "MACOS"
 
 
 class IndexerType(Enum):

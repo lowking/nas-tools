@@ -41,8 +41,12 @@ class SystemUtils:
         """
         获取操作系统类型
         """
-        if platform.system() == 'Windows':
+        if SystemUtils.is_windows():
             return OsType.WINDOWS
+        elif SystemUtils.is_synology():
+            return OsType.SYNOLOGY
+        elif platform.system() == 'Darwin':
+            return OsType.MACOS
         else:
             return OsType.LINUX
 
@@ -92,6 +96,10 @@ class SystemUtils:
     @staticmethod
     def is_synology():
         return True if "synology" in SystemUtils.execute('uname -a') else False
+        
+    @staticmethod
+    def is_windows():
+        return True if os.name == "nt" else False
 
     @staticmethod
     def copy(src, dest):
