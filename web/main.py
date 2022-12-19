@@ -15,6 +15,7 @@ from threading import Lock
 from urllib import parse
 
 from flask import Flask, request, json, render_template, make_response, session, send_from_directory, send_file
+from flask_compress import Compress
 from flask_login import LoginManager, login_user, login_required, current_user
 
 import log
@@ -33,6 +34,7 @@ from app.subscribe import Subscribe
 from app.sync import Sync
 from app.torrentremover import TorrentRemover
 from app.utils import DomUtils, SystemUtils, WebUtils
+from app.utils.exception_util import ExceptionUtils
 from app.utils.types import *
 from config import WECHAT_MENU, PT_TRANSFER_INTERVAL, TORRENT_SEARCH_PARAMS, NETTEST_TARGETS, Config
 from web.action import WebAction
@@ -50,6 +52,9 @@ App = Flask(__name__)
 App.config['JSON_AS_ASCII'] = False
 App.secret_key = os.urandom(24)
 App.permanent_session_lifetime = datetime.timedelta(days=30)
+
+# 启用压缩
+Compress(App)
 
 # 登录管理模块
 LoginManager = LoginManager()
@@ -93,11 +98,13 @@ def action_login_check(func):
     """
     Action安全认证
     """
+
     @wraps(func)
     def login_check(*args, **kwargs):
         if not current_user.is_authenticated:
             return {"code": -1, "msg": "用户未登录"}
         return func(*args, **kwargs)
+
     return login_check
 
 
@@ -116,6 +123,7 @@ def login():
             SyncMod = "link"
         RestypeDict = TORRENT_SEARCH_PARAMS.get("restype")
         PixDict = TORRENT_SEARCH_PARAMS.get("pix")
+        SiteFavicons = Sites().get_site_favicon()
         return render_template('navigation.html',
                                GoPage=GoPage,
                                UserName=userinfo.username,
@@ -125,7 +133,8 @@ def login():
                                AppVersion=WebUtils.get_current_version(),
                                RestypeDict=RestypeDict,
                                PixDict=PixDict,
-                               SyncMod=SyncMod)
+                               SyncMod=SyncMod,
+                               SiteFavicons=SiteFavicons)
 
     def redirect_to_login(errmsg=''):
         """
@@ -236,8 +245,14 @@ def search():
     SearchResults = res.get("result")
     Count = res.get("total")
     # 站点列表
-    SiteDict = [{"id": item.id, "name": item.name} for item in Searcher().indexer.get_indexers() or []]
-    SiteFavicons = Sites().get_site_favicon()
+    SiteDict = {}
+    for item in Searcher().indexer.get_indexers() or []:
+        SiteDict[item.name] = {
+            "id": item.id,
+            "name": item.name,
+            "public": item.public,
+            "builtin": item.builtin
+        }
     return render_template("search.html",
                            UserPris=str(pris).split(","),
                            SearchWord=SearchWord or "",
@@ -247,7 +262,6 @@ def search():
                            RestypeDict=TORRENT_SEARCH_PARAMS.get("restype"),
                            PixDict=TORRENT_SEARCH_PARAMS.get("pix"),
                            SiteDict=SiteDict,
-                           SiteFavicons=SiteFavicons,
                            UPCHAR=chr(8593))
 
 
@@ -316,7 +330,8 @@ def rss_history():
 @login_required
 def rss_calendar():
     Today = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d')
-    RssMovieItems = [{"tmdbid": movie.get("tmdbid"), "rssid": movie.get("id")} for movie in Subscribe().get_subscribe_movies().values() if movie.get("tmdbid")]
+    RssMovieItems = [{"tmdbid": movie.get("tmdbid"), "rssid": movie.get("id")} for movie in
+                     Subscribe().get_subscribe_movies().values() if movie.get("tmdbid")]
     RssTvItems = [{
         "id": tv.get("tmdbid"),
         "rssid": tv.get("id"),
@@ -559,7 +574,8 @@ def service():
         '''
 
         scheduler_cfg_list.append(
-            {'name': '订阅搜索', 'time': tim_rsssearch, 'state': rss_search_state, 'id': 'subscribe_search_all', 'svg': svg,
+            {'name': '订阅搜索', 'time': tim_rsssearch, 'state': rss_search_state, 'id': 'subscribe_search_all',
+             'svg': svg,
              'color': "blue"})
 
         # 下载文件转移
@@ -840,7 +856,7 @@ def mediafile():
         try:
             DirD = os.path.commonpath(download_dirs).replace("\\", "/")
         except Exception as err:
-            print(str(err))
+            ExceptionUtils.exception_traceback(err)
             DirD = "/"
     else:
         DirD = "/"
@@ -1011,6 +1027,7 @@ def do():
         cmd = request.form.get("cmd")
         data = request.form.get("data")
     except Exception as e:
+        ExceptionUtils.exception_traceback(e)
         return {"code": -1, "msg": str(e)}
     if data:
         data = json.loads(data)
@@ -1054,6 +1071,7 @@ def dirlist():
                         e, ff.replace("\\", "/"), f.replace("\\", "/")))
         r.append('</ul>')
     except Exception as e:
+        ExceptionUtils.exception_traceback(e)
         r.append('加载路径失败: %s' % str(e))
     r.append('</ul>')
     return make_response(''.join(r), 200)
@@ -1155,6 +1173,7 @@ def wechat():
                                                user_name=user_id)
             return make_response(content, 200)
         except Exception as err:
+            ExceptionUtils.exception_traceback(err)
             log.error("微信消息处理发生错误：%s - %s" % (str(err), traceback.format_exc()))
             return make_response("ok", 200)
 
@@ -1503,7 +1522,7 @@ def backup():
         shutil.make_archive(str(backup_path), 'zip', str(backup_path))
         shutil.rmtree(str(backup_path))
     except Exception as e:
-        log.debug(e)
+        ExceptionUtils.exception_traceback(e)
         return make_response("创建备份失败", 400)
     return send_file(zip_file)
 
@@ -1517,7 +1536,7 @@ def upload():
         files.save(str(zip_file))
         return {"code": 0, "filepath": str(zip_file)}
     except Exception as e:
-        log.debug(e)
+        ExceptionUtils.exception_traceback(e)
         return {"code": 1, "msg": str(e), "filepath": ""}
 
 
@@ -1543,3 +1562,9 @@ def brush_rule_string(rules):
 @App.template_filter('str_filesize')
 def str_filesize(size):
     return WebAction.str_filesize(size)
+
+
+# MD5 HASH过滤器
+@App.template_filter('hash')
+def md5_hash(size):
+    return WebAction.md5_hash(size)

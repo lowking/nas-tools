@@ -2,10 +2,12 @@
 import json
 
 from app.sites.siteuserinfo.nexus_php import NexusPhpSiteUserInfo
+from app.utils.exception_util import ExceptionUtils
+from app.utils.types import SiteSchema
 
 
 class NexusRabbitSiteUserInfo(NexusPhpSiteUserInfo):
-    _site_schema = "NexusRabbit"
+    schema = SiteSchema.NexusRabbit
 
     def _parse_site_page(self, html_text):
         super()._parse_site_page(html_text)
@@ -23,7 +25,7 @@ class NexusRabbitSiteUserInfo(NexusPhpSiteUserInfo):
         try:
             torrents = json.loads(html_text).get('data')
         except Exception as e:
-            print(str(e))
+            ExceptionUtils.exception_traceback(e)
             return
 
         page_seeding_size = 0

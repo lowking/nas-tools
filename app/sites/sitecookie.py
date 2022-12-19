@@ -7,11 +7,11 @@ from selenium.webdriver.support import expected_conditions as es
 from selenium.webdriver.support.wait import WebDriverWait
 
 import log
-from app.helper import ChromeHelper, ProgressHelper, CHROME_LOCK, DbHelper
-from app.helper.ocr_helper import OcrHelper
+from app.helper import ChromeHelper, ProgressHelper, CHROME_LOCK, DbHelper, OcrHelper, SiteHelper
 from app.sites import Sites
 from app.utils import StringUtils, RequestUtils
 from app.utils.commons import singleton
+from app.utils.exception_util import ExceptionUtils
 from config import SITE_LOGIN_XPATH
 
 
@@ -73,7 +73,7 @@ class SiteCookie(object):
             try:
                 chrome.visit(url=url)
             except Exception as err:
-                print(str(err))
+                ExceptionUtils.exception_traceback(err)
                 return None, None, "Chrome模拟访问失败"
             # 循环检测是否过cf
             cloudflare = chrome.pass_cloudflare()
@@ -83,7 +83,7 @@ class SiteCookie(object):
             html_text = chrome.get_html()
             if not html_text:
                 return None, None, "获取源码失败"
-            if self.sites.is_signin_success(html_text):
+            if SiteHelper.is_logged_in(html_text):
                 return chrome.get_cookies(), chrome.get_ua(), "已经登录过且Cookie未失效"
             # 查找用户名输入框
             html = etree.HTML(html_text)
@@ -193,12 +193,13 @@ class SiteCookie(object):
                 else:
                     return None, None, "未找到登录按钮"
             except Exception as e:
+                ExceptionUtils.exception_traceback(e)
                 return None, None, "仿真登录失败：%s" % str(e)
             # 登录后的源码
             html_text = chrome.get_html()
             if not html_text:
                 return None, None, "获取源码失败"
-            if self.sites.is_signin_success(html_text):
+            if SiteHelper.is_logged_in(html_text):
                 return chrome.get_cookies(), chrome.get_ua(), ""
             else:
                 # 读取错误信息

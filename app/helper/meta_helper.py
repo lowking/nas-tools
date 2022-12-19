@@ -6,6 +6,7 @@ from enum import Enum
 from threading import RLock
 
 from app.utils.commons import singleton
+from app.utils.exception_util import ExceptionUtils
 from config import Config
 
 lock = RLock()
@@ -65,7 +66,7 @@ class MetaHelper(object):
                     self.update_meta_data({key: info})
                 elif expire and self._tmdb_cache_expire:
                     self.delete_meta_data(key)
-            return info
+            return info or {}
 
     def dump_meta_data(self, search, page, num):
         """
@@ -144,7 +145,7 @@ class MetaHelper(object):
                 return data
             return {}
         except Exception as e:
-            print(str(e))
+            ExceptionUtils.exception_traceback(e)
             return {}
 
     def update_meta_data(self, meta_data):
