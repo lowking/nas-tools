@@ -140,6 +140,10 @@ class DOUBANMEDIAS(Base):
     RATING = Column(Text)
     IMAGE = Column(Text)
     STATE = Column(Text)
+    ADD_TIME = Column(Text)
+
+    def as_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 
 class DOWNLOADHISTORY(Base):
@@ -391,6 +395,9 @@ class SITEBRUSHTORRENTS(Base):
     DOWNLOADER = Column(Text)
     DOWNLOAD_ID = Column(Text)
     LST_MOD_DATE = Column(Text)
+
+    def as_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 
 class SITESTATISTICSHISTORY(Base):
