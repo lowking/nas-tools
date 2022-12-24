@@ -227,10 +227,10 @@ class IIndexClient(metaclass=ABCMeta):
                 'downloadvolumefactor') is not None else 1.0
             imdbid = item.get("imdbid")
             # 全匹配模式下，非公开站点，过滤掉做种数为0的
-            if filter_args.get("seeders") and not indexer.public and str(seeders) == "0":
-                log.info(f"【{self.index_type}】{torrent_name} 做种数为0")
-                index_rule_fail += 1
-                continue
+            # if filter_args.get("seeders") and not indexer.public and str(seeders) == "0":
+            #     log.info(f"【{self.index_type}】{torrent_name} 做种数为0")
+            #     index_rule_fail += 1
+            #     continue
             # 识别种子名称
             meta_info = MetaInfo(title=torrent_name, subtitle=description)
             if not meta_info.get_name():
