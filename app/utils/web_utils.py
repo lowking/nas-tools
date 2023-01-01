@@ -1,5 +1,5 @@
-import os
-from app.utils import RequestUtils, SystemUtils
+from app.utils.http_utils import RequestUtils
+from app.utils.system_utils import SystemUtils
 from app.utils.exception_utils import ExceptionUtils
 from version import APP_VERSION
 

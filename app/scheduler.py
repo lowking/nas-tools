@@ -15,8 +15,8 @@ from app.rss import Rss
 from app.sites import Sites
 from app.subscribe import Subscribe
 from app.sync import Sync
+from app.utils import ExceptionUtils
 from app.utils.commons import singleton
-from app.utils.exception_utils import ExceptionUtils
 from config import PT_TRANSFER_INTERVAL, METAINFO_SAVE_INTERVAL, \
     SYNC_TRANSFER_INTERVAL, RSS_CHECK_INTERVAL, REFRESH_PT_DATA_INTERVAL, \
     RSS_REFRESH_TMDB_INTERVAL, META_DELETE_UNKNOWN_INTERVAL, REFRESH_WALLPAPER_INTERVAL, Config
@@ -42,7 +42,7 @@ class Scheduler:
         """
         读取配置，启动定时服务
         """
-        self.SCHEDULER = BackgroundScheduler(timezone="Asia/Shanghai",
+        self.SCHEDULER = BackgroundScheduler(timezone=Config().get_timezone(),
                                              executors={
                                                  'default': ThreadPoolExecutor(20)
                                              })

@@ -11,12 +11,12 @@ from time import sleep
 import log
 from app.helper import DbHelper
 from app.helper import ThreadHelper
-from app.media import Media, MetaInfo, Category, Scraper
+from app.media import Media, Category, Scraper
+from app.media.meta import MetaInfo
 from app.mediaserver import MediaServer
 from app.message import Message
 from app.subtitle import Subtitle
-from app.utils import EpisodeFormat, PathUtils, StringUtils, SystemUtils
-from app.utils.exception_utils import ExceptionUtils
+from app.utils import EpisodeFormat, PathUtils, StringUtils, SystemUtils, ExceptionUtils
 from app.utils.types import MediaType, SyncType, RmtMode, RMT_MODES
 from config import RMT_SUBEXT, RMT_MEDIAEXT, RMT_FAVTYPE, RMT_MIN_FILESIZE, DEFAULT_MOVIE_FORMAT, \
     DEFAULT_TV_FORMAT, Config
@@ -188,6 +188,18 @@ class FileTransfer:
         :param new_name: 新文件名
         :param rmt_mode: RmtMode转移方式
         """
+        # 字幕正则式
+        _zhcn_sub_re = r"([.\[(](((zh[-_])?(cn|ch[si]|sg|sc))|zho?" \
+                       r"|chinese|(cn|ch[si]|sg|zho?|eng)[-_&](cn|ch[si]|sg|zho?|eng)" \
+                       r"|简[体中]?)[.\])])" \
+                       r"|([\u4e00-\u9fa5]{0,3}[中双][\u4e00-\u9fa5]{0,2}[字文语][\u4e00-\u9fa5]{0,3})" \
+                       r"|简体|简中"
+        _zhtw_sub_re = r"([.\[(](((zh[-_])?(hk|tw|cht|tc))" \
+                       r"|繁[体中]?)[.\])])" \
+                       r"|繁体中[文字]|中[文字]繁体|繁体"
+        _eng_sub_re = r"[.\[(]eng[.\])]"
+
+        # 比对文件名并转移字幕
         dir_name = os.path.dirname(org_name)
         file_name = os.path.basename(org_name)
         file_list = PathUtils.get_dir_level1_files(dir_name, RMT_SUBEXT)
@@ -197,7 +209,14 @@ class FileTransfer:
             log.debug("【Rmt】字幕文件清单：" + str(file_list))
             metainfo = MetaInfo(title=file_name)
             for file_item in file_list:
-                sub_file_name = os.path.basename(file_item)
+                sub_file_name = re.sub(_zhtw_sub_re,
+                                       ".",
+                                       re.sub(_zhcn_sub_re,
+                                              ".",
+                                              os.path.basename(file_item),
+                                              flags=re.I),
+                                       flags=re.I)
+                sub_file_name = re.sub(_eng_sub_re, ".", sub_file_name, flags=re.I)
                 sub_metainfo = MetaInfo(title=os.path.basename(file_item))
                 if (os.path.splitext(file_name)[0] == os.path.splitext(sub_file_name)[0]) or \
                         (sub_metainfo.cn_name and sub_metainfo.cn_name == metainfo.cn_name) \
@@ -208,23 +227,14 @@ class FileTransfer:
                     if metainfo.get_episode_string() \
                             and metainfo.get_episode_string() != sub_metainfo.get_episode_string():
                         continue
-                    new_file_type = ".未知语言"
+                    new_file_type = ""
                     # 兼容jellyfin字幕识别(多重识别), emby则会识别最后一个后缀
-                    if re.search(
-                            r"([.\[(](((zh[-_])?(cn|ch[si]|sg|sc))|zho?"
-                            r"|chinese|(cn|ch[si]|sg|zho?|eng)[-_&](cn|ch[si]|sg|zho?|eng)"
-                            r"|简[体中]?)[.\])])"
-                            r"|([\u4e00-\u9fa5]{0,3}[中双][\u4e00-\u9fa5]{0,2}[字文语][\u4e00-\u9fa5]{0,3})"
-                            r"|简体|简中",
-                            file_item, re.I):
+                    if re.search(_zhcn_sub_re, file_item, re.I):
                         new_file_type = ".chi.zh-cn"
-                    elif re.search(r"([.\[(](((zh[-_])?(hk|tw|cht|tc))"
-                                   r"|繁[体中]?)[.\])])"
-                                   r"|繁体中[文字]|中[文字]繁体|繁体", file_item,
+                    elif re.search(_zhtw_sub_re, file_item,
                                    re.I):
                         new_file_type = ".zh-tw"
-                    elif re.search(r"[.\[(]eng[.\])]", file_item,
-                                   re.I):
+                    elif re.search(_eng_sub_re, file_item, re.I):
                         new_file_type = ".eng"
                     # 通过对比字幕文件大小  尽量转移所有存在的字幕
                     file_ext = os.path.splitext(file_item)[-1]
@@ -233,8 +243,13 @@ class FileTransfer:
                         ".chi.zh-cn": ".简体中文",
                         ".zh-tw": ".繁体中文"
                     }
-                    new_sub_tag_list = [new_file_type if t == 0 else "%s%s(%s)" % (
-                        new_file_type, new_sub_tag_dict.get(new_file_type, ""), t) for t in range(6)]
+                    new_sub_tag_list = [
+                        new_file_type if t == 0 else "%s%s(%s)" % (new_file_type,
+                                                                   new_sub_tag_dict.get(
+                                                                       new_file_type, ""
+                                                                   ),
+                                                                   t) for t in range(6)
+                    ]
                     for new_sub_tag in new_sub_tag_list:
                         new_file = os.path.splitext(new_name)[0] + new_sub_tag + file_ext
                         # 如果字幕文件不存在, 直接转移字幕, 并跳出循环
@@ -551,10 +566,12 @@ class FileTransfer:
                     if udf_flag:
                         return success_flag, error_message
                     # 记录未识别
-                    self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                    is_need_insert_unknown = self.dbhelper.is_need_insert_transfer_unknown(reg_path)
+                    if is_need_insert_unknown:
+                        self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                        alert_count += 1
                     failed_count += 1
-                    alert_count += 1
-                    if error_message not in alert_messages:
+                    if error_message not in alert_messages and is_need_insert_unknown:
                         alert_messages.append(error_message)
                     # 原样转移过去
                     if unknown_dir:
@@ -645,10 +662,12 @@ class FileTransfer:
                         if udf_flag:
                             return success_flag, error_message
                         # 记录未识别
-                        self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                        is_need_insert_unknown = self.dbhelper.is_need_insert_transfer_unknown(reg_path)
+                        if is_need_insert_unknown:
+                            self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                            alert_count += 1
                         failed_count += 1
-                        alert_count += 1
-                        if error_message not in alert_messages:
+                        if error_message not in alert_messages and is_need_insert_unknown:
                             alert_messages.append(error_message)
                         continue
                     else:
@@ -678,10 +697,12 @@ class FileTransfer:
                             if udf_flag:
                                 return success_flag, error_message
                             # 记录未识别
-                            self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                            is_need_insert_unknown = self.dbhelper.is_need_insert_transfer_unknown(reg_path)
+                            if is_need_insert_unknown:
+                                self.dbhelper.insert_transfer_unknown(reg_path, target_dir)
+                                alert_count += 1
                             failed_count += 1
-                            alert_count += 1
-                            if error_message not in alert_messages:
+                            if error_message not in alert_messages and is_need_insert_unknown:
                                 alert_messages.append(error_message)
                             continue
                         new_file = "%s%s" % (ret_file_path, file_ext)
@@ -1100,16 +1121,17 @@ class FileTransfer:
                                        target_file=new_file,
                                        rmt_mode=sync_transfer_mode), ""
 
-    @staticmethod
-    def get_format_dict(media):
+    def get_format_dict(self, media):
         """
         根据媒体信息，返回Format字典
         """
         if not media:
             return {}
+        episode_title = self.media.get_episode_title(media)
+        en_title = self.media.get_tmdb_en_title(media)
         return {
             "title": StringUtils.clear_file_name(media.title),
-            "en_title": StringUtils.clear_file_name(media.en_name),
+            "en_title": StringUtils.clear_file_name(en_title),
             "original_name": StringUtils.clear_file_name(os.path.splitext(media.org_string or "")[0]),
             "original_title": StringUtils.clear_file_name(media.original_title),
             "name": StringUtils.clear_file_name(media.get_name()),
@@ -1122,6 +1144,7 @@ class FileTransfer:
             "tmdbid": media.tmdb_id,
             "season": media.get_season_seq(),
             "episode": media.get_episode_seqs(),
+            "episode_title": StringUtils.clear_file_name(episode_title),
             "season_episode": "%s%s" % (media.get_season_item(), media.get_episode_items()),
             "part": media.part
         }

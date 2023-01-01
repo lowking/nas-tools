@@ -1,15 +1,11 @@
 import os
-import shutil
 import signal
 import sys
 import time
 import warnings
-
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-
-from app.utils.cache_manager import ConfigLoadCache
-from app.utils.exception_utils import ExceptionUtils
+from app.utils import ConfigLoadCache, ExceptionUtils
 
 warnings.filterwarnings('ignore')
 
@@ -55,7 +51,7 @@ import log
 from web.main import App
 from app.brushtask import BrushTask
 from app.db import init_db, update_db
-from app.helper import IndexerHelper, DisplayHelper, ChromeHelper
+from app.helper import IndexerHelper, DisplayHelper
 from app.rsschecker import RssChecker
 from app.scheduler import run_scheduler, restart_scheduler
 from app.sync import run_monitor, restart_monitor
@@ -74,8 +70,6 @@ def sigal_handler(num, stack):
         log.warn('捕捉到退出信号：%s，开始退出...' % num)
         # 停止虚拟显示
         DisplayHelper().quit()
-        # 停止Chrome
-        ChromeHelper().quit()
         # 退出主进程
         sys.exit()
 

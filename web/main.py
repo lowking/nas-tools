@@ -24,7 +24,7 @@ from app.downloader import Downloader
 from app.filter import Filter
 from app.helper import SecurityHelper, MetaHelper
 from app.indexer import Indexer
-from app.media import MetaInfo
+from app.media.meta import MetaInfo
 from app.mediaserver import WebhookEvent
 from app.message import Message
 from app.rsschecker import RssChecker
@@ -32,8 +32,7 @@ from app.sites import Sites
 from app.subscribe import Subscribe
 from app.sync import Sync
 from app.torrentremover import TorrentRemover
-from app.utils import DomUtils, SystemUtils, WebUtils
-from app.utils.exception_utils import ExceptionUtils
+from app.utils import DomUtils, SystemUtils, WebUtils, ExceptionUtils
 from app.utils.types import *
 from config import WECHAT_MENU, PT_TRANSFER_INTERVAL, TORRENT_SEARCH_PARAMS, NETTEST_TARGETS, Config
 from web.action import WebAction
@@ -391,9 +390,7 @@ def resources():
 def recommend():
     RecommendType = request.args.get("t")
     CurrentPage = request.args.get("page") or 1
-    Items = WebAction().get_recommend({"type": RecommendType, "page": CurrentPage}).get("Items")
     return render_template("recommend.html",
-                           Items=Items,
                            RecommendType=RecommendType,
                            CurrentPage=CurrentPage)
 
@@ -436,6 +433,8 @@ def torrent_remove():
 def statistics():
     # 刷新单个site
     refresh_site = request.args.getlist("refresh_site")
+    # 强制刷新所有
+    refresh_force = True if request.args.get("refresh_force") else False
     # 总上传下载
     TotalUpload = 0
     TotalDownload = 0
@@ -447,10 +446,8 @@ def statistics():
     SiteDownloads = []
     SiteRatios = []
     SiteErrs = {}
-    # 刷新指定站点
-    Sites().refresh_pt(specify_sites=refresh_site)
     # 站点上传下载
-    SiteData = Sites().get_pt_date()
+    SiteData = Sites().get_pt_date(specify_sites=refresh_site, force=refresh_force)
     if isinstance(SiteData, dict):
         for name, data in SiteData.items():
             if not data:
@@ -855,7 +852,7 @@ def mediafile():
         try:
             DirD = os.path.commonpath(download_dirs).replace("\\", "/")
         except Exception as err:
-            ExceptionUtils.exception_traceback(err)
+            print(str(err))
             DirD = "/"
     else:
         DirD = "/"
@@ -920,9 +917,11 @@ def downloader():
 @login_required
 def download_setting():
     DownloadSetting = Downloader().get_download_setting()
+    DefaultDownloadSetting = Downloader().get_default_download_setting()
     Count = len(DownloadSetting)
     return render_template("setting/download_setting.html",
                            DownloadSetting=DownloadSetting,
+                           DefaultDownloadSetting=DefaultDownloadSetting,
                            DownloaderTypes=DownloaderType,
                            Count=Count)
 
@@ -1484,6 +1483,7 @@ def subscribe():
         return make_response(msg, 500)
 
 
+# 备份配置文件
 @App.route('/backup', methods=['POST'])
 @login_required
 def backup():
@@ -1530,14 +1530,15 @@ def backup():
     return send_file(zip_file)
 
 
+# 上传文件到服务器
 @App.route('/upload', methods=['POST'])
 @login_required
 def upload():
     try:
         files = request.files['file']
-        zip_file = Path(Config().get_config_path()) / files.filename
-        files.save(str(zip_file))
-        return {"code": 0, "filepath": str(zip_file)}
+        file_path = Path(Config().get_temp_path()) / files.filename
+        files.save(str(file_path))
+        return {"code": 0, "filepath": str(file_path)}
     except Exception as e:
         ExceptionUtils.exception_traceback(e)
         return {"code": 1, "msg": str(e), "filepath": ""}

@@ -10,13 +10,13 @@ import log
 from app.downloader import Downloader
 from app.filter import Filter
 from app.helper import DbHelper
-from app.media import Media, MetaInfo
+from app.media import Media
+from app.media.meta import MetaInfo
 from app.message import Message
 from app.searcher import Searcher
 from app.subscribe import Subscribe
-from app.utils import RequestUtils, StringUtils
+from app.utils import RequestUtils, StringUtils, ExceptionUtils
 from app.utils.commons import singleton
-from app.utils.exception_utils import ExceptionUtils
 from app.utils.types import MediaType, SearchType
 from config import Config
 
@@ -114,7 +114,7 @@ class RssChecker(object):
         if not self._rss_tasks:
             return
         # 启动RSS任务
-        self._scheduler = BackgroundScheduler(timezone="Asia/Shanghai",
+        self._scheduler = BackgroundScheduler(timezone=Config().get_timezone(),
                                               executors={
                                                   'default': ThreadPoolExecutor(30)
                                               })

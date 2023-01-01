@@ -101,52 +101,6 @@ NETTEST_TARGETS = ["www.themoviedb.org",
                    "qyapi.weixin.qq.com",
                    "www.opensubtitles.org"]
 
-# 站点签到支持的识别XPATH
-SITE_CHECKIN_XPATH = [
-    '//a[@id="signed"]',
-    '//a[contains(@href, "attendance")]',
-    '//a[contains(text(), "签到")]',
-    '//a/b[contains(text(), "签 到")]',
-    '//span[@id="sign_in"]/a',
-    '//a[contains(@href, "addbonus")]',
-    '//input[@class="dt_button"][contains(@value, "打卡")]',
-    '//a[contains(@href, "sign_in")]',
-    '//a[@id="do-attendance"]'
-]
-
-# 站点详情页字幕下载链接识别XPATH
-SITE_SUBTITLE_XPATH = [
-    '//td[@class="rowhead"][text()="字幕"]/following-sibling::td//a/@href',
-]
-
-# 站点登录界面元素XPATH
-SITE_LOGIN_XPATH = {
-    "username": [
-        '//input[@name="username"]'
-    ],
-    "password": [
-        '//input[@name="password"]'
-    ],
-    "captcha": [
-        '//input[@name="imagestring"]'
-    ],
-    "captcha_img": [
-        '//img[@alt="CAPTCHA"]/@src',
-        '//img[@alt="SECURITY CODE"]/@src'
-    ],
-    "submit": [
-        '//input[@type="submit"]',
-        '//button[@type="submit"]'
-    ],
-    "error": [
-        "//table[@class='main']//td[@class='text']/text()"
-    ],
-    "twostep": [
-        '//input[@name="two_step_code"]',
-        '//input[@name="2fa_secret"]'
-    ]
-}
-
 # WebDriver路径
 WEBDRIVER_PATH = {
     "Docker": "/usr/lib/chromium/chromedriver",
@@ -184,7 +138,8 @@ class Config(object):
 
     def __init__(self):
         self._config_path = os.environ.get('NASTOOL_CONFIG')
-        os.environ['TZ'] = 'Asia/Shanghai'
+        if not os.environ.get('TZ'):
+            os.environ['TZ'] = 'Asia/Shanghai'
         self.init_config()
 
     def init_config(self):
@@ -229,6 +184,9 @@ class Config(object):
     def get_config_path(self):
         return os.path.dirname(self._config_path)
 
+    def get_temp_path(self):
+        return os.path.join(self.get_config_path(), "temp")
+
     @staticmethod
     def get_root_path():
         return os.path.dirname(os.path.realpath(__file__))
@@ -241,3 +199,7 @@ class Config(object):
         if domain and not domain.startswith('http'):
             domain = "http://" + domain
         return domain
+
+    @staticmethod
+    def get_timezone():
+        return os.environ.get('TZ')

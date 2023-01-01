@@ -570,9 +570,7 @@
         return;
       }
       if (flag == "disable" || flag == "enable") {
-        show_wait_process();
         ajax_post("check_custom_words", { flag: flag, ids_info: ids_info }, function (ret) {
-          hide_wait_process();
           if (ret.code == 0) {
             navmenu('customwords');
           } else {
@@ -587,9 +585,7 @@
 
     // 删除自定义识别词
     function delete_custom_word(id) {
-      show_wait_process();
       ajax_post("delete_custom_word", { id: id }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           navmenu('customwords');
         }
@@ -613,9 +609,7 @@
         $("#export_note").removeClass("is-invalid");
       }
       $("#modal-export-custom-words-note").modal('hide');
-      show_wait_process();
       ajax_post("export_custom_words", { note: export_note, ids_info: export_ids_info }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           $("#export_code").text(ret.string);
           $("#modal-export-custom-words-code").modal('show');
@@ -634,9 +628,7 @@
       const import_code = $("#import_code").val();
       $("#import_groups_div").empty();
       $("#modal-import-custom-words-code").modal('hide');
-      show_wait_process();
       ajax_post("analyse_import_custom_words_code", { import_code: import_code }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           $("#import_note").text(ret.note_string);
           const Groups = ret.groups;
@@ -710,9 +702,7 @@
         }
       });
       $("#modal-import-custom-words-table").modal('hide');
-      show_wait_process();
       ajax_post("import_custom_words", { ids_info: ids_info, import_code: import_code }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           $("#import_groups_div").empty();
 
@@ -742,9 +732,7 @@
       }
       let tmdb_type = $("#tmdb_type").val();
       $("#modal-add-custom-word-group").modal('hide');
-      show_wait_process();
       ajax_post("add_custom_word_group", { tmdb_id: tmdb_id, tmdb_type: tmdb_type }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           navmenu('customwords');
         } else {
@@ -759,9 +747,7 @@
     function delete_custom_word_group(gid) {
       show_confirm_modal("组内识别词将被同步删除，是否确认？", function () {
         hide_confirm_modal();
-        show_wait_process();
         ajax_post("delete_custom_word_group", { gid: gid }, function (ret) {
-          hide_wait_process();
           if (ret.code == 0) {
             navmenu('customwords');
           } else {
@@ -794,9 +780,7 @@
 
     // 显示编辑识别词框
     function show_edit_custom_word_modal(wid, gid, group_type, seasons) {
-      show_wait_process();
       ajax_post("get_custom_word", { wid: wid }, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           let word = ret.data;
           $("#customd_word_modal_title").text("编辑识别词");
@@ -895,7 +879,7 @@
         } else {
           $("#new_replaced").removeClass("is-invalid");
         }
-        if (!new_replace || new_replace == new_replaced) {
+        if (!new_replace || new_replace === new_replaced) {
           $("#new_replace").addClass("is-invalid");
           return;
         } else {
@@ -937,9 +921,7 @@
         regex: regex
       };
       $("#modal-set-custom-word").modal('hide');
-      show_wait_process();
       ajax_post("add_or_edit_custom_word", custom_word, function (ret) {
-        hide_wait_process();
         if (ret.code == 0) {
           navmenu('customwords');
         } else {
@@ -965,8 +947,7 @@
         console.log("yes")
         $("#season_div").show();
         $("#help_div").attr('class', 'col-lg-6');
-        $("#custom_word_season").empty();
-        $("#custom_word_season").append('<option value="-1" selected>全部</option>');
+        $("#custom_word_season").empty().append('<option value="-1" selected>全部</option>');
         for (let i = 0; i <= seasons; i++) {
           $("#custom_word_season").append(`<option value="${i}">第${i}季</option>`);
         }
@@ -1005,10 +986,8 @@
         $("#front_div").attr('class', 'col-lg-4');
         $("#back_div").attr('class', 'col-lg-4');
         $("#custom_word_enabled_2").val($("#custom_word_enabled_1").val());
-        $("#enable_row2_div").val("1");
-        $("#enable_row2_div").show();
-        $("#custom_word_regex").val("1");
-        $("#custom_word_regex").attr("disabled", "disabled");
+        $("#enable_row2_div").val("1").show();
+        $("#custom_word_regex").val("1").attr("disabled", "disabled");
         $("#type_offset").prop("checked", true);
       }
       else if (type == '3') {
@@ -1021,10 +1000,8 @@
         if ($("#enable_row2_div").val() == "1") {
           $("#custom_word_enabled_1").val($("#custom_word_enabled_2").val());
         }
-        $("#enable_row2_div").val("0");
-        $("#enable_row2_div").hide();
-        $("#custom_word_regex").val("1");
-        $("#custom_word_regex").attr("disabled", "disabled");
+        $("#enable_row2_div").val("0").hide();
+        $("#custom_word_regex").val("1").attr("disabled", "disabled");
         $("#type_replaced_offset").prop("checked", true);
       }
     }

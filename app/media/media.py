@@ -10,12 +10,9 @@ from lxml import etree
 
 import log
 from app.helper import MetaHelper
-from app.media import MetaInfo
-from app.media.tmdbv3api import TMDb, Search, Movie, TV, Person, Find
-from app.media.tmdbv3api.exceptions import TMDbException
-from app.utils import PathUtils, EpisodeFormat, RequestUtils, NumberUtils, StringUtils
-from app.utils import cacheman
-from app.utils.exception_utils import ExceptionUtils
+from app.media.meta.metainfo import MetaInfo
+from app.media.tmdbv3api import TMDb, Search, Movie, TV, Person, Find, TMDbException
+from app.utils import PathUtils, EpisodeFormat, RequestUtils, NumberUtils, StringUtils, cacheman, ExceptionUtils
 from app.utils.types import MediaType, MatchMode
 from config import Config, KEYWORD_BLACKLIST, KEYWORD_SEARCH_WEIGHT_3, KEYWORD_SEARCH_WEIGHT_2, KEYWORD_SEARCH_WEIGHT_1, \
     KEYWORD_STR_SIMILARITY_THRESHOLD, KEYWORD_DIFF_SCORE_THRESHOLD, TMDB_IMAGE_ORIGINAL_URL, DEFAULT_TMDB_PROXY
@@ -1033,6 +1030,34 @@ class Media:
             if season.get("season_number") == sea:
                 return int(season.get("episode_count"))
         return 0
+
+    def get_tmdb_en_title(self, media_info):
+        """
+        获取TMDB的英文名称
+        """
+        en_info = self.get_tmdb_info(mtype=media_info.type,
+                                     tmdbid=media_info.tmdb_id,
+                                     language="en-US")
+        if en_info:
+            return en_info.get("title") if media_info.type == MediaType.MOVIE else en_info.get("name")
+        return None
+
+    def get_episode_title(self, media_info):
+        """
+        获取剧集的标题
+        """
+        if media_info.type == MediaType.MOVIE:
+            return None
+        if media_info.tmdb_id:
+            if not media_info.begin_episode:
+                return None
+            tv_info = self.get_tmdb_tv_season_detail(tmdbid=media_info.tmdb_id,
+                                                     season=int(media_info.get_season_seq()))
+            if tv_info:
+                for episode in tv_info.get("episodes") or []:
+                    if episode.get("episode_number") == media_info.begin_episode:
+                        return episode.get("name")
+        return None
 
     def get_movie_discover(self, page=1):
         """

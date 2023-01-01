@@ -6,7 +6,8 @@ import log
 from app.downloader import Downloader
 from app.helper import DbHelper, ProgressHelper
 from app.indexer import Indexer
-from app.media import MetaInfo, Media
+from app.media import Media
+from app.media.meta import MetaInfo
 from app.media.douban import DouBan
 from app.message import Message
 from app.searcher import Searcher
@@ -43,7 +44,7 @@ def search_medias_for_web(content, ident_flag=True, filters=None, tmdbid=None, m
         # 有TMDBID或豆瓣ID
         if tmdbid:
             # 豆瓣ID
-            if tmdbid.startswith("DB:"):
+            if str(tmdbid).startswith("DB:"):
                 # 以豆瓣ID查询
                 doubanid = tmdbid[3:]
                 # 先从网页抓取（含TMDBID）
@@ -105,10 +106,9 @@ def search_medias_for_web(content, ident_flag=True, filters=None, tmdbid=None, m
                 if media_info.original_language == "en":
                     search_en_name = media_info.original_title
                 else:
-                    en_info = Media().get_tmdb_info(mtype=media_info.type, tmdbid=media_info.tmdb_id, language="en-US")
-                    if en_info:
-                        search_en_name = en_info.get("title") if media_info.type == MediaType.MOVIE else en_info.get(
-                            "name")
+                    en_title = Media().get_tmdb_en_title(media_info)
+                    if en_title:
+                        search_en_name = en_title
             # 两次搜索名称
             second_search_name = None
             if Config().get_config("laboratory").get("search_en_title"):
