@@ -5,21 +5,23 @@ import requests
 
 import log
 from app.helper import ThreadHelper
-from app.message.message_client import IMessageClient
-from app.utils import RequestUtils
-from app.utils.exception_utils import ExceptionUtils
+from app.message.client._base import _IMessageClient
+from app.utils import RequestUtils, ExceptionUtils
 from config import Config
 
 lock = Lock()
 WEBHOOK_STATUS = False
 
 
-class Telegram(IMessageClient):
+class Telegram(_IMessageClient):
+    schema = "telegram"
+
     _telegram_token = None
     _telegram_chat_id = None
     _webhook = None
     _webhook_url = None
     _telegram_user_ids = []
+    _telegram_admin_ids = []
     _domain = None
     _config = None
     _message_proxy_event = None
@@ -27,10 +29,10 @@ class Telegram(IMessageClient):
     _interactive = False
     _enabled = True
 
-    def __init__(self, config, interactive=False):
+    def __init__(self, config):
         self._config = Config()
         self._client_config = config
-        self._interactive = interactive
+        self._interactive = config.get("interactive")
         self._domain = self._config.get_domain()
         if self._domain and self._domain.endswith("/"):
             self._domain = self._domain[:-1]
@@ -41,11 +43,16 @@ class Telegram(IMessageClient):
             self._telegram_token = self._client_config.get('token')
             self._telegram_chat_id = self._client_config.get('chat_id')
             self._webhook = self._client_config.get('webhook')
+            telegram_admin_ids = self._client_config.get('admin_ids')
+            if telegram_admin_ids:
+                self._telegram_admin_ids = telegram_admin_ids.split(",").append(str(self._telegram_chat_id))
+            else:
+                self._telegram_admin_ids = [str(self._telegram_chat_id)]
             telegram_user_ids = self._client_config.get('user_ids')
             if telegram_user_ids:
-                self._telegram_user_ids = telegram_user_ids.split(",")
+                self._telegram_user_ids = telegram_user_ids.split(",") + self._telegram_admin_ids
             else:
-                self._telegram_user_ids = []
+                self._telegram_user_ids = self._telegram_admin_ids
             if self._telegram_token and self._telegram_chat_id:
                 if self._webhook:
                     if self._domain:
@@ -61,11 +68,21 @@ class Telegram(IMessageClient):
                         self._message_proxy_event = event
                         ThreadHelper().start_thread(self.__start_telegram_message_proxy, [event])
 
-    def get_admin_user(self):
+    @classmethod
+    def match(cls, ctype):
+        return True if ctype == cls.schema else False
+
+    def get_admin(self):
         """
-        获取Telegram配置文件中的ChatId，即管理员用户ID
+        获取允许使用远程命令的user_id列表
         """
-        return str(self._telegram_chat_id)
+        return self._telegram_admin_ids
+
+    def get_users(self):
+        """
+        获取允许使用telegram机器人的user_id列表
+        """
+        return self._telegram_user_ids
 
     def send_msg(self, title, text="", image="", url="", user_id=""):
         """
@@ -260,12 +277,6 @@ class Telegram(IMessageClient):
             return True
         else:
             return False
-
-    def get_users(self):
-        """
-        获取Telegram配置文件中的User Ids，即允许使用telegram机器人的user_id列表
-        """
-        return self._telegram_user_ids
 
     def __start_telegram_message_proxy(self, event: Event):
         log.info("Telegram消息接收服务启动")

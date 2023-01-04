@@ -8,7 +8,7 @@ from lxml import etree
 
 import log
 from app.helper import SubHelper
-from app.sites.siteconf import SiteConf
+from app.conf import SiteConf
 from app.utils import RequestUtils, PathUtils, SystemUtils, StringUtils, ExceptionUtils
 from app.utils.commons import singleton
 from app.utils.types import MediaType
@@ -236,6 +236,7 @@ class Subtitle:
                             else:
                                 log.info("【Subtitle】ChineseSubFinder任务添加成功：%s" % job_id)
                                 ret_msg = "ChineseSubFinder任务添加成功：%s" % job_id
+                                success = True
                         else:
                             log.error("【Subtitle】%s 目录缺失nfo元数据" % file_path)
                             ret_msg = "%s 目录下缺失nfo元数据：" % file_path

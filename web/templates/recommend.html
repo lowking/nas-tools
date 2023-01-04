@@ -1,3 +1,4 @@
+{% import 'macro/oops.html' as OOPS %}
 <div class="container-xl">
   <!-- Page title -->
   <div class="page-header d-print-none">
@@ -77,7 +78,6 @@
 
   //状态标记
   var loading = false;
-
   function loading_data() {
     if (loading || CurrentPage > 10) {
       return;
@@ -85,10 +85,16 @@
     loading = true;
     add_loading_card_placeholder();
     ajax_post("get_recommend", { "type": title_type, "page": CurrentPage }, function (ret) {
-      CurrentPage++;
       if (ret.Items.length > 0) {
+        // 记录页码
+        CurrentPage++;
+        sessionStorage.CurrentPage = CurrentPage;
         loading = false;
         page_card_num = ret.Items.length;
+      } else {
+        if (CurrentPage == 1) {
+          $("#recommend_content").html($("#no_recommend_html").text());
+        }
       }
       del_loading_card_placeholder();
       // 插入HTML
@@ -111,6 +117,7 @@
         html += '</div>';
         $("#recommend_content").append(html);
       }
+      window_history();
     });
   }
 
@@ -122,7 +129,15 @@
     });
   });
 
-  // 初始化数据
-  loading_data();
+  // 后退时sessionStorage.CurrentPage 未被清除, 则更新当前页码
+  if (sessionStorage.CurrentPage) {
+    CurrentPage = sessionStorage.CurrentPage;
+  } else {
+    // 否则初始化数据
+    loading_data();
+  }
 
+</script>
+<script type="text/html" id="no_recommend_html">
+{{ OOPS.empty('没有媒体', '请检查TMDB API Key是否设置，以及网络是否连通。') }}
 </script>

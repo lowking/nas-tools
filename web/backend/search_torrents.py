@@ -7,14 +7,14 @@ from app.downloader import Downloader
 from app.helper import DbHelper, ProgressHelper
 from app.indexer import Indexer
 from app.media import Media
-from app.media.meta import MetaInfo
 from app.media.douban import DouBan
+from app.media.meta import MetaInfo
 from app.message import Message
 from app.searcher import Searcher
 from app.sites import Sites
 from app.subscribe import Subscribe
 from app.utils import StringUtils
-from app.utils.types import SearchType, MediaType, IndexerType
+from app.utils.types import SearchType, IndexerType
 from config import Config
 
 SEARCH_MEDIA_CACHE = {}
@@ -269,7 +269,7 @@ def search_media_by_message(input_str, in_from: SearchType, user_id, user_name=N
         indexers = Indexer().get_indexers()
 
         # 获取字符串中可能的搜索站点列表
-        if indexer_type == IndexerType.BUILTIN.value:
+        if indexer_type == IndexerType.BUILTIN:
             search_sites, _ = StringUtils.get_idlist_from_string(org_content, [{
                 "id": indexer.name,
                 "name": indexer.name

@@ -1397,7 +1397,7 @@ class DbHelper:
         date_ret = self._db.query(func.max(SITESTATISTICSHISTORY.DATE),
                                   func.MIN(SITESTATISTICSHISTORY.DATE)).filter(
             SITESTATISTICSHISTORY.DATE > b_date).all()
-        if date_ret:
+        if date_ret and date_ret[0][0]:
             total_upload = 0
             total_download = 0
             ret_sites = []
@@ -1548,7 +1548,9 @@ class DbHelper:
                 DOWNLOAD_SIZE='0',
                 UPLOAD_SIZE='0',
                 STATE=item.get('state'),
-                LST_MOD_DATE=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+                LST_MOD_DATE=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
+                SENDMESSAGE=item.get('sendmessage'),
+                FORCEUPLOAD=item.get('forceupload')
             ))
         else:
             self._db.query(SITEBRUSHTASK).filter(SITEBRUSHTASK.ID == int(brush_id)).update(
@@ -1564,6 +1566,8 @@ class DbHelper:
                     "TRANSFER": item.get('transfer'),
                     "STATE": item.get('state'),
                     "LST_MOD_DATE": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
+                    "SENDMESSAGE": item.get('sendmessage'),
+                    "FORCEUPLOAD": item.get('forceupload')
                 }
             )
 
@@ -1941,6 +1945,7 @@ class DbHelper:
                 PARAMS=item.get("params")
             ))
 
+    @DbPersist(_db)
     def excute(self, sql):
         return self._db.excute(sql)
 
@@ -1962,7 +1967,7 @@ class DbHelper:
         """
         if not task_id:
             return []
-        return self._db.query(USERRSSTASKHISTORY).filter(USERRSSTASKHISTORY.TASK_ID == task_id)\
+        return self._db.query(USERRSSTASKHISTORY).filter(USERRSSTASKHISTORY.TASK_ID == task_id) \
             .order_by(USERRSSTASKHISTORY.DATE.desc()).all()
 
     def get_rss_history(self, rtype=None, rid=None):
@@ -1972,7 +1977,7 @@ class DbHelper:
         if rid:
             return self._db.query(RSSHISTORY).filter(RSSHISTORY.ID == int(rid)).all()
         elif rtype:
-            return self._db.query(RSSHISTORY).filter(RSSHISTORY.TYPE == rtype)\
+            return self._db.query(RSSHISTORY).filter(RSSHISTORY.TYPE == rtype) \
                 .order_by(RSSHISTORY.FINISH_TIME.desc()).all()
         return self._db.query(RSSHISTORY).order_by(RSSHISTORY.FINISH_TIME.desc()).all()
 
@@ -2062,15 +2067,15 @@ class DbHelper:
         查询自定义识别词
         """
         if wid:
-            return self._db.query(CUSTOMWORDS).filter(CUSTOMWORDS.ID == int(wid))\
+            return self._db.query(CUSTOMWORDS).filter(CUSTOMWORDS.ID == int(wid)) \
                 .order_by(CUSTOMWORDS.GROUP_ID).all()
         elif gid:
-            return self._db.query(CUSTOMWORDS).filter(CUSTOMWORDS.GROUP_ID == int(gid))\
+            return self._db.query(CUSTOMWORDS).filter(CUSTOMWORDS.GROUP_ID == int(gid)) \
                 .order_by(CUSTOMWORDS.GROUP_ID).all()
         elif wtype and enabled is not None and regex is not None:
             return self._db.query(CUSTOMWORDS).filter(CUSTOMWORDS.ENABLED == int(enabled),
                                                       CUSTOMWORDS.TYPE == int(wtype),
-                                                      CUSTOMWORDS.REGEX == int(regex))\
+                                                      CUSTOMWORDS.REGEX == int(regex)) \
                 .order_by(CUSTOMWORDS.GROUP_ID).all()
         return self._db.query(CUSTOMWORDS).all().order_by(CUSTOMWORDS.GROUP_ID)
 
