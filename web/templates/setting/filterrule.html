@@ -227,7 +227,7 @@
                   {% for Rule in Init_RuleGroup.rules %}
                     <label class="form-selectgroup-item">
                       <input type="button" value="{{ Rule | safe }}" class="form-selectgroup-input"
-                             onclick="javascript:apply_templated(this)">
+                             onclick="apply_templated(this)">
                       <span class="form-selectgroup-label">{{ Rule.name }}</span>
                     </label>
                   {% endfor %}
@@ -241,7 +241,7 @@
         <button id="filterrule_close_btn" class="btn btn-link">
           取消
         </button>
-        <button id="add_or_edit_filterrule_btn" class="btn btn-primary ms-auto" onclick="javascript:add_filterrule()">
+        <button id="add_or_edit_filterrule_btn" class="btn btn-primary ms-auto" onclick="add_filterrule()">
           新增
         </button>
       </div>
@@ -272,7 +272,7 @@
             <div class="mb-3">
               <label class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="rulegroup_default"
-                       onclick="javascript:change_over_edition_check(this)">
+                       onclick="change_over_edition_check(this)">
                 <span class="form-check-label">默认 <span class="form-help"
                                                           title="将该规则组设为默认规则，在远程搜索、订阅等未指定规则组的场景下默认使用"
                                                           data-bs-toggle="tooltip">?</span></span>
@@ -400,28 +400,21 @@
   // 恢复初始规则
   function restore_filtergroup() {
     let init_rulegroups = {{ Init_RuleGroups | safe }};
-    let need_init_groupid = [];
-    let i = 0;
-    $("input[name=init_rulegroup]").each(function () {
-      if ($(this).prop("checked")) {
-        need_init_groupid[i] = $(this).val();
-        i = i + 1;
-      }
-    });
+    let need_init_groupid = select_GetSelectedVAL("init_rulegroup");
     $("#restore_rulegroup_btn").text("恢复中").attr("disabled", true);
     ajax_post("restore_filtergroup", {
       "groupids": need_init_groupid,
       "init_rulegroups": init_rulegroups
     }, function (ret) {
       $("#modal-restore-filtergroup").modal('hide');
-      navmenu('filterrule');
+      window_history_refresh();
     });
   }
 
   // 设置默认规则组
   function set_default_filtergroup(id) {
     ajax_post("set_default_filtergroup", {"id": id}, function (ret) {
-      navmenu('filterrule');
+      window_history_refresh();
     });
   }
 
@@ -467,7 +460,7 @@
     ajax_post("add_filtergroup", params, function (ret) {
       if (ret.code == 0) {
         $("#modal-add-filtergroup").modal('hide');
-        navmenu('filterrule');
+        window_history_refresh();
       }
     });
   }
@@ -477,7 +470,7 @@
     show_confirm_modal("删除规则组后，该组下所有的规则将会同时被删除，是否确认删除 " + name + " ？", function () {
       hide_confirm_modal();
       ajax_post("del_filtergroup", {"id": id}, function (ret) {
-        navmenu('filterrule');
+        window_history_refresh();
       });
     });
   }
@@ -517,7 +510,7 @@
     ajax_post("add_filterrule", params, function (ret) {
       if (ret.code == 0) {
         $("#modal-add-filterrule").modal('hide');
-        navmenu('filterrule');
+        window_history_refresh();
       }
     });
   }
@@ -527,7 +520,7 @@
     const params = {"id": id};
     ajax_post("del_filterrule", params, function (ret) {
       $("#modal-add-filterrule").modal('hide');
-      navmenu('filterrule');
+      window_history_refresh();
     });
   }
 
@@ -568,7 +561,7 @@
     $("#modal-import-filtergroup").modal('hide');
     ajax_post("import_filtergroup", {"content": content}, function (ret) {
       if (ret.code == 0) {
-        navmenu('filterrule');
+        window_history_refresh();
       } else {
         show_fail_modal(`规则导入失败：${ret.msg}`, function () {
           $("#modal-import-filtergroup").modal('show');

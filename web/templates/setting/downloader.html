@@ -413,17 +413,8 @@
   // 保存配置
   function save_config(type, func, test) {
     currType = type;
-    const params = {"test": test || false};
-    $("#modal-" + type + " input").each(function () {
-      let value;
-      const key = $(this).attr("id");
-      if ($(this).attr("type") === "checkbox") {
-        value = !!$(this).prop("checked");
-      } else {
-        value = $(this).val();
-      }
-      params[key] = value;
-    });
+    const params = input_GetInputVal(`modal-${type}`)
+    params["test"] = test || false;
     params['pt.pt_client'] = type;
     ajax_post("update_config", params, func);
   }
@@ -432,7 +423,7 @@
   function save_downloader_config(type) {
     $("#modal-" + type).modal('hide');
     save_config(type, function (ret) {
-      navmenu('downloader');
+      window_history_refresh();
     });
   }
 
@@ -495,7 +486,7 @@
       });
     });
     ajax_post("update_config", {downloaddir: download_dir}, function () {
-      navmenu('downloader');
+      window_history_refresh();
     });
 
   }
@@ -555,7 +546,7 @@
   }
 
 </script>
-<script id="dirdiv_template" type="text">
+<script id="dirdiv_template" type="text/html">
 <div class="row" id="dirdiv_{DIRDIV_LEVEL}">
   <div class="col-12 col-lg-2 mb-1">
     <select class="form-select" name="dir_type" id="dir_type_{DIRDIV_LEVEL}" onchange="get_categories(this)">

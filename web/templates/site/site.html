@@ -50,9 +50,11 @@
               <a href="javascript:edit_site('{{ Site.id }}')" class="btn-action ms-1" title="编辑站点">
                 {{ SVG.edit() }}
               </a>
+              {% if ChromeOk %}
               <a href="javascript:show_site_cookie_ua_modal('{{ Site.id }}', '{{ Site.name }}')" class="btn-action ms-1" title="更新站点Cookie和User-Agent">
                 {{ SVG.refresh_dot() }}
               </a>
+              {% endif %}
               <a href="javascript:remove_site('{{ Site.name }}', '{{ Site.id }}')" class="btn-action ms-1" title="删除站点">
                 {{ SVG.x() }}
               </a>
@@ -233,8 +235,10 @@
               <label class="form-label required">开启浏览器仿真 <span class="form-help"
                   title="开启后站点签到、数据统计可以兼容更多站点，但获取数据耗时会大幅增加；需要拉取含浏览器内核的镜像才能使用" data-bs-toggle="tooltip">?</span></label>
               <select class="form-select" id="site_chrome">
-                <option value="Y" selected>是</option>
-                <option value="N">否</option>
+                {% if ChromeOk %}
+                <option value="Y">是</option>
+                {% endif %}
+                <option value="N" selected>否</option>
               </select>
             </div>
           </div>
@@ -292,8 +296,10 @@
         <table class="table table-vcenter card-table">
           <thead>
             <tr>
-              <th class="w-1"><input class="form-check-input m-0 align-middle" id="sitetest_check_all_btn"
-                  type="checkbox" aria-label="全选"></th>
+              <th>
+                <input class="form-check-input m-0 align-middle" type="checkbox" aria-label="全选"
+                       onclick="select_SelectALL($(this).prop('checked'), 'test_sites_item')">
+              </th>
               <th>站点</th>
               <th>连通性</th>
               <th>耗时</th>
@@ -303,7 +309,7 @@
           <tbody>
             {% for Site in Sites %}
             <tr>
-              <td class="w-1"><input class="form-check-input m-0 align-middle" id="check_{{ Site.id }}" type="checkbox">
+              <td class="w-1"><input class="form-check-input m-0 align-middle" name="test_sites_item" value="{{ Site.id }}" type="checkbox">
               </td>
               <td><span>{{ Site.name }}</span></td>
               <td id="sitetest_item{{ Site.id }}"></td>
@@ -448,23 +454,7 @@
         $("#site_proxy").val(ret.site.proxy);
         $("#site_subtitle").val(ret.site.subtitle);
         $("#site_unread_msg_notify").val(ret.site.unread_msg_notify)
-        $("input[name=site_uses]").each(function () {
-          $(this).prop("checked", false);
-        });
-        $("input[name=site_uses]").each(function () {
-          if ($(this).val() == "Q" && ret.site.signin_enable) {
-            $(this).prop("checked", true);
-          }
-          if ($(this).val() == "D" && ret.site.rss_enable) {
-            $(this).prop("checked", true);
-          }
-          if ($(this).val() == "S" && ret.site.brush_enable) {
-            $(this).prop("checked", true);
-          }
-          if ($(this).val() == "T" && ret.site.statistic_enable) {
-            $(this).prop("checked", true);
-          }
-        });
+        select_SelectPart(ret.site.uses, "site_uses")
         $("#modal-site-title").text("编辑站点");
         $("#add_or_edit_site_btn").text("修改");
         $("#modal-site").modal("show");
@@ -476,7 +466,7 @@
   //删除站点
   function del_site(tid) {
     ajax_post("del_site", { "id": tid }, function (ret) {
-      navmenu('site');
+      window_history_refresh();
     });
   }
 
@@ -523,12 +513,7 @@
     let site_rule = $("#site_rule").val();
     let site_parse = $("#site_parse").val();
     let site_unread_msg_notify = $("#site_unread_msg_notify").val();
-    let site_uses = "";
-    $("input[name=site_uses]").each(function () {
-      if ($(this).prop("checked")) {
-        site_uses = site_uses + $(this).val();
-      }
-    });
+    let site_uses = select_GetSelectedVAL("site_uses").join("");
     if (site_uses.match(/[DS]/) && !site_rssurl) {
       $("#site_rssurl").addClass("is-invalid");
       return;
@@ -564,7 +549,7 @@
       $("#add_or_edit_site_btn").attr("disabled", false).text("新增");
       $("#modal-site").modal("hide");
       //刷新页面
-      navmenu('site');
+      window_history_refresh();
     });
   }
 
@@ -598,11 +583,6 @@
     $("#site_pri").append('<option value="' + i + '">' + i + '</option>');
   }
 
-  //全选事件
-  $("#sitetest_check_all_btn").change(function () {
-    $("#modal-sitetest input[type=checkbox]").prop("checked", $(this).prop("checked"));
-  });
-
   //显示测试站点
   function show_sitetest_modal() {
     $("#modal-sitetest").modal("show");
@@ -615,14 +595,10 @@
     if (!siteid) {
       return;
     }
-    $("#sitetest_btn").attr("disabled", true);
-    $("#sitetest_btn").text("测试中...");
     total_test_sites = total_test_sites + 1;
     ajax_post("test_site", { id: siteid }, function (ret) {
       finished_test_sites = finished_test_sites + 1;
       if (finished_test_sites >= total_test_sites) {
-        $("#sitetest_btn").attr("disabled", false);
-        $("#sitetest_btn").text("测试");
         total_test_sites = 0
         finished_test_sites = 0
       }
@@ -789,12 +765,12 @@
 
   // 站点测试按钮
   $("#sitetest_btn").click(function () {
-    $("#modal-sitetest input[type=checkbox]").each(function () {
-      if ($(this).attr("id").startsWith("check_") && $(this).prop("checked")) {
-        let siteid = $(this).attr("id").replace("check_", "");
-        test_one_site(siteid);
-      }
-    });
+    let siteids = select_GetSelectedVAL("test_sites_item");
+    $("#sitetest_btn").text("测试中...").attr("disabled", true);
+    for (let siteid of siteids) {
+      test_one_site(siteid);
+    }
+    $("#sitetest_btn").text("测试").attr("disabled", false);
   });
 
 </script>

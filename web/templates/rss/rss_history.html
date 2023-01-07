@@ -53,7 +53,7 @@
                 {% for Item in Items %}
                   <tr>
                     <td>
-                      <img class="rounded shadow w-5" src="{{ Item.IMAGE }}"
+                      <img class="rounded shadow-sm w-5" src="{{ Item.IMAGE }}"
                           onerror="this.src='../static/img/no-image.png'" alt=""
                           style="min-width: 50px"/>
                     </td>
@@ -121,7 +121,7 @@
   //删除订阅历史
   function delete_rss_history(rssid) {
     ajax_post("delete_rss_history", {"rssid": rssid}, function (ret) {
-      navmenu('rss_history?t={{ Type }}');
+      window_history_refresh();
     });
   }
 </script>
