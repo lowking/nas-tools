@@ -743,12 +743,12 @@ class DbHelper:
         查询订阅电视剧信息
         """
         if rssid:
-            return self._db.query(RSSTVS).filter(RSSTVS.ID == int(rssid)).all()
+            return self._db.query(RSSTVS).order_by(cast(RSSTVS.ID, Integer).desc()).filter(RSSTVS.ID == int(rssid)).all()
         else:
             if not state:
-                return self._db.query(RSSTVS).all()
+                return self._db.query(RSSTVS).order_by(cast(RSSTVS.ID, Integer).desc()).all()
             else:
-                return self._db.query(RSSTVS).filter(RSSTVS.STATE == state).all()
+                return self._db.query(RSSTVS).order_by(cast(RSSTVS.ID, Integer).desc()).filter(RSSTVS.STATE == state).all()
 
     def get_rss_tv_id(self, title, season=None, tmdbid=None):
         """
