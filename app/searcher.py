@@ -111,7 +111,8 @@ class Searcher:
             if media_info.original_language == "en":
                 search_en_name = media_info.original_title
             else:
-                en_title = self.media.get_tmdb_en_title(media_info)
+                # 此处使用独立对象，避免影响TMDB语言
+                en_title = Media().get_tmdb_en_title(media_info)
                 if en_title:
                     search_en_name = en_title
         # 两次搜索名称
@@ -146,7 +147,7 @@ class Searcher:
             log.info("【Searcher】%s 未搜索到任何资源" % second_search_name)
             return False, no_exists, 0, 0
         else:
-            if in_from in [SearchType.WX, SearchType.TG, SearchType.SLACK]:
+            if in_from in self.message.get_search_types():
                 # 保存搜索记录
                 self.dbhelper.delete_all_search_torrents()
                 # 搜索结果排序

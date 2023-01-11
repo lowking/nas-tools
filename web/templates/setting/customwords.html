@@ -89,6 +89,7 @@
                            onclick="select_SelectALL($(this).prop('checked'), 'custom_words_{{ Group.id }}')">
                  </th>
                   {% endif %}
+                  <th class="w-1"></th>
                   <th>被替换词</th>
                   <th>替换词</th>
                   <th>偏移集数</th>
@@ -107,24 +108,20 @@
                     <input class="form-check-input m-0 align-middle" name="custom_words_{{ Group.id }}"
                            value="{{ Group.id }}_{{ Word.id }}" type="checkbox">
                   </td>
+                  <td><span class="badge bg-{% if Word.enabled == 1 %}green{% else %}red{% endif %}"></span></td>
                   <td>{{ Word.replaced }}</td>
                   <td>{{ Word.replace }}</td>
                   <td>
                     {% if Word.offset %}
-                    <span class="badge badge-outline text-cyan me-1 mb-1" style="vertical-align: middle;">{{ Word.offset
+                    <span class="badge badge-outline text-cyan mb-1" style="vertical-align: middle;">{{ Word.offset
                       }}</span>
                     {% endif %}
                   </td>
                   <td>{{ Word.front }}</td>
                   <td>{{ Word.back }}</td>
                   <td>
-                    {% if Word.enabled == 1 %}
-                    <span class="badge badge-outline text-green me-1 mb-1" style="vertical-align: middle;">启用</span>
-                    {% else %}
-                    <span class="badge badge-outline text-red me-1 mb-1" style="vertical-align: middle;">停用</span>
-                    {% endif %}
                     {% if Word.regex == 1 %}
-                    <span class="badge badge-outline text-blue me-1 mb-1" style="vertical-align: middle;">RegEx</span>
+                    <span class="badge bg-blue mb-1" style="vertical-align: middle;">RegEx</span>
                     {% endif %}
                   </td>
                   <td>
@@ -438,7 +435,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-link me-auto" data-bs-dismiss="modal">取消</button>
-          <a id="import_btn" href="javascript:analyse_import_custom_words_code()" class="btn btn-primary">解析分享代码</a>
+          <a id="customword_analyse_btn" href="javascript:analyse_import_custom_words_code()" class="btn btn-primary">解析分享代码</a>
         </div>
       </div>
     </div>
@@ -465,7 +462,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-link me-auto" data-bs-dismiss="modal">取消</button>
-          <a id="import_btn" href="javascript:import_custom_words()" class="btn btn-primary">导入</a>
+          <a id="customword_import_btn" href="javascript:import_custom_words()" class="btn btn-primary">导入</a>
         </div>
       </div>
     </div>
@@ -590,7 +587,7 @@
               tbody_content = `${tbody_content}<tr>${checkbox}${replaced}${replace}${offset}${front}${back}${regex}${note}</tr>`;
             }
             let tbody = `<tbody>${tbody_content}<tr></tr></tbody>`;
-            let table = `<table class="table table-vcenter card-table">${thead}${tbody}</table>`;
+            let table = `<div class="table-responsive"><table class="table table-vcenter card-table">${thead}${tbody}</table><div>`;
             let head;
             if (Group.link) {
               head = `<div class="card-header"><a href="${Group.link}" target="_blank"><h3 class="card-title"><strong>${Group.name}</strong></h3></a></div>`;
@@ -600,6 +597,10 @@
             $("#import_groups_div").append(`${head}${table}`);
           }
           $("#modal-import-custom-words-table").modal('show');
+        } else {
+          show_fail_modal(`解析失败：${ret.msg}`, function () {
+            $("#modal-import-custom-words-code").modal('show');
+          });
         }
       });
     }
@@ -607,14 +608,14 @@
     // 导入选择的识别词
     function import_custom_words() {
       const import_code = $("#import_code").val();
-      let ids_info = select_GetSelectedVAL("import_custom_words");
+      let ids_info = select_GetSelectedVAL("^import_custom_words");
       $("#modal-import-custom-words-table").modal('hide');
       ajax_post("import_custom_words", { ids_info: ids_info, import_code: import_code }, function (ret) {
         if (ret.code == 0) {
           $("#import_groups_div").empty();
           window_history_refresh();
         } else {
-          show_fail_modal(ret.msg, function() {
+          show_fail_modal(`导入失败！请确认分享代码有效：${ret.msg}`, function() {
             $("#modal-import-custom-words-table").modal('show');
           });
         }

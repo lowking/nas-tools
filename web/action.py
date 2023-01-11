@@ -1,6 +1,5 @@
 import base64
 import datetime
-import hashlib
 import importlib
 import json
 import os.path
@@ -903,6 +902,10 @@ class WebAction:
             if not os.path.exists(file):
                 return False, f"{file} 不存在"
             os.remove(file)
+            nfoname = f"{os.path.splitext(filename)[0]}.nfo"
+            nfofile = os.path.join(filedir, nfoname)
+            if os.path.exists(file):
+                os.remove(nfofile)
             # 检查空目录并删除
             if re.findall(r"^S\d{2}|^Season", os.path.basename(filedir), re.I):
                 # 当前是季文件夹，判断并删除
@@ -1056,13 +1059,10 @@ class WebAction:
         statistic = True if data.get("statistic") else False
         basic = True if data.get("basic") else False
         if basic:
-            sites = [{
-                "id": site.get("id"),
-                "name": site.get("name")
-            } for site in Sites().get_sites(rss=rss,
-                                            brush=brush,
-                                            signin=signin,
-                                            statistic=statistic)]
+            sites = Sites().get_site_dict(rss=rss,
+                                          brush=brush,
+                                          signin=signin,
+                                          statistic=statistic)
         else:
             sites = Sites().get_sites(rss=rss,
                                       brush=brush,
@@ -2280,7 +2280,8 @@ class WebAction:
             res_list = DouBan().get_douban_hot_show(CurrentPage)
         elif RecommendType == "bangumi":
             # Bangumi每日放送
-            res_list = Bangumi().get_bangumi_calendar(CurrentPage)
+            Week = data.get("week")
+            res_list = Bangumi().get_bangumi_calendar(page=CurrentPage, week=Week)
         else:
             res_list = []
 
@@ -2461,10 +2462,6 @@ class WebAction:
         return "<br>".join(rule_htmls)
 
     @staticmethod
-    def str_filesize(size):
-        return StringUtils.str_filesize(size, pre=1)
-
-    @staticmethod
     def __clear_tmdb_cache(data):
         """
         清空TMDB缓存
@@ -2593,7 +2590,8 @@ class WebAction:
             "filterrule": data.get("filterrule"),
             "state": data.get("state"),
             "save_path": data.get("save_path"),
-            "download_setting": data.get("download_setting")
+            "download_setting": data.get("download_setting"),
+            "recognization": data.get("recognization")
         }
         if self.dbhelper.update_userrss_task(params):
             RssChecker().init_config()
@@ -2658,10 +2656,11 @@ class WebAction:
 
     @staticmethod
     def __list_rss_articles(data):
+        uses = RssChecker().get_rsstask_info(taskid=data.get("id")).get("uses")
         articles = RssChecker().get_rss_articles(data.get("id"))
         count = len(articles)
         if articles:
-            return {"code": 0, "data": articles, "count": count}
+            return {"code": 0, "data": articles, "count": count, "uses": uses}
         else:
             return {"code": 1, "msg": "未获取到报文"}
 
@@ -3928,9 +3927,9 @@ class WebAction:
                 del_flag, del_msg = self.delete_media_file(filedir=os.path.dirname(file),
                                                            filename=os.path.basename(file))
                 if not del_flag:
-                    log.error(f"【History】{del_msg}")
+                    log.error(f"【MediaFile】{del_msg}")
                 else:
-                    log.info(f"【History】{del_msg}")
+                    log.info(f"【MediaFile】{del_msg}")
         return {"code": 0}
 
     @staticmethod
@@ -4085,11 +4084,7 @@ class WebAction:
         """
         获取索引器
         """
-        indexers = [{
-            "id": index.id,
-            "name": index.name
-        } for index in Indexer().get_indexers()]
-        return {"code": 0, "indexers": indexers}
+        return {"code": 0, "indexers": Indexer().get_indexer_dict()}
 
     @staticmethod
     def __get_download_dirs(data):
@@ -4208,15 +4203,6 @@ class WebAction:
         return {"code": 0}
 
     @staticmethod
-    def md5_hash(data):
-        """
-        MD5 HASH
-        """
-        if not data:
-            return ""
-        return hashlib.md5(str(data).encode()).hexdigest()
-
-    @staticmethod
     def __get_site_favicon(data):
         """
         获取站点图标
@@ -4244,6 +4230,8 @@ class WebAction:
         """
         results = self.dbhelper.get_brushtask_torrents(brush_id=data.get("id"),
                                                        active=False)
+        if not results:
+            return {"code": 1, "msg": "未下载种子或未获取到种子明细"}
         return {"code": 0, "data": [item.as_dict() for item in results]}
 
     @staticmethod
@@ -4281,7 +4269,7 @@ class WebAction:
                 statistics.sort(key=lambda x: x[sort_by], reverse=True)
         if site_hash == "Y":
             for item in statistics:
-                item["site_hash"] = WebAction.md5_hash(item.get("site"))
+                item["site_hash"] = StringUtils.md5_hash(item.get("site"))
         return {"code": 0, "data": statistics}
 
     @staticmethod

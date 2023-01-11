@@ -33,7 +33,7 @@ from app.sites import Sites
 from app.subscribe import Subscribe
 from app.sync import Sync
 from app.torrentremover import TorrentRemover
-from app.utils import DomUtils, SystemUtils, WebUtils, ExceptionUtils
+from app.utils import DomUtils, SystemUtils, WebUtils, ExceptionUtils, StringUtils
 from app.utils.types import *
 from config import PT_TRANSFER_INTERVAL, Config
 from web.action import WebAction
@@ -246,14 +246,7 @@ def search():
     SearchResults = res.get("result")
     Count = res.get("total")
     # 站点列表
-    SiteDict = {}
-    for item in Indexer().get_indexers() or []:
-        SiteDict[md5_hash(item.name)] = {
-            "id": item.id,
-            "name": item.name,
-            "public": item.public,
-            "builtin": item.builtin
-        }
+    SiteDict = Indexer().get_indexer_hash_dict()
     return render_template("search.html",
                            UserPris=str(pris).split(","),
                            SearchWord=SearchWord or "",
@@ -331,18 +324,36 @@ def rss_history():
 @login_required
 def rss_calendar():
     Today = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d')
-    RssMovieItems = [{"tmdbid": movie.get("tmdbid"), "rssid": movie.get("id")} for movie in
-                     Subscribe().get_subscribe_movies().values() if movie.get("tmdbid")]
-    RssTvItems = [{
-        "id": tv.get("tmdbid"),
-        "rssid": tv.get("id"),
-        "season": int(str(tv.get('season')).replace("S", "")),
-        "name": tv.get("name"),
-    } for tv in Subscribe().get_subscribe_tvs().values() if tv.get('season') and tv.get("tmdbid")]
+    # 电影订阅
+    RssMovieItems = [
+        {
+            "tmdbid": movie.get("tmdbid"),
+            "rssid": movie.get("id")
+        } for movie in Subscribe().get_subscribe_movies().values() if movie.get("tmdbid")
+    ]
+    # 电视剧订阅
+    RssTvItems = [
+        {
+            "id": tv.get("tmdbid"),
+            "rssid": tv.get("id"),
+            "season": int(str(tv.get('season')).replace("S", "")),
+            "name": tv.get("name"),
+        } for tv in Subscribe().get_subscribe_tvs().values() if tv.get('season') and tv.get("tmdbid")
+    ]
+    # 自定义订阅
+    RssTvItems += RssChecker().get_userrss_mediainfos()
+    # 电视剧订阅去重
+    Uniques = set()
+    UniqueTvItems = []
+    for item in RssTvItems:
+        unique = f"{item.get('id')}_{item.get('season')}"
+        if unique not in Uniques:
+            Uniques.add(unique)
+            UniqueTvItems.append(item)
     return render_template("rss/rss_calendar.html",
                            Today=Today,
                            RssMovieItems=RssMovieItems,
-                           RssTvItems=RssTvItems)
+                           RssTvItems=UniqueTvItems)
 
 
 # 站点维护页面
@@ -395,9 +406,11 @@ def resources():
 def recommend():
     RecommendType = request.args.get("t")
     CurrentPage = request.args.get("page") or 1
+    Week = request.args.get("week") or None
     return render_template("discovery/recommend.html",
                            RecommendType=RecommendType,
-                           CurrentPage=CurrentPage)
+                           CurrentPage=CurrentPage,
+                           Week=Week)
 
 
 # 电影推荐页面
@@ -414,6 +427,14 @@ def discovery_movie():
 def discovery_tv():
     return render_template("discovery/discovery.html",
                            DiscoveryType="tv")
+
+
+# Bangumi每日放送
+@App.route('/discovery_bangumi', methods=['POST', 'GET'])
+@login_required
+def discovery_bangumi():
+    return render_template("discovery/discovery.html",
+                           DiscoveryType="bangumi")
 
 
 # 正在下载页面
@@ -1594,10 +1615,10 @@ def brush_rule_string(rules):
 # 大小格式化过滤器
 @App.template_filter('str_filesize')
 def str_filesize(size):
-    return WebAction.str_filesize(size)
+    return StringUtils.str_filesize(size, pre=1)
 
 
 # MD5 HASH过滤器
 @App.template_filter('hash')
 def md5_hash(text):
-    return WebAction.md5_hash(text)
+    return StringUtils.md5_hash(text)

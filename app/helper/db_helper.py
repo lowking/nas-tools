@@ -137,8 +137,11 @@ class DbHelper:
         """
         删除RSS的记录
         """
-        self._db.query(RSSTORRENTS).filter(RSSTORRENTS.TORRENT_NAME == title,
-                                           RSSTORRENTS.ENCLOSURE == enclosure).delete()
+        if enclosure:
+            self._db.query(RSSTORRENTS).filter(RSSTORRENTS.TORRENT_NAME == title,
+                                               RSSTORRENTS.ENCLOSURE == enclosure).delete()
+        else:
+            self._db.query(RSSTORRENTS).filter(RSSTORRENTS.TORRENT_NAME == title).delete()
 
     @DbPersist(_db)
     def insert_douban_media_state(self, media, state):
@@ -183,16 +186,16 @@ class DbHelper:
         return self._db.query(DOUBANMEDIAS.STATE).filter(DOUBANMEDIAS.NAME == title,
                                                          DOUBANMEDIAS.YEAR == str(year)).all()
 
-    def is_transfer_history_exists(self, file_path, file_name, title, se):
+    def is_transfer_history_exists(self, source_path, source_filename, dest_path, dest_filename):
         """
         查询识别转移记录
         """
-        if not file_path:
+        if not source_path or not source_filename or not dest_path or not dest_filename:
             return False
-        ret = self._db.query(TRANSFERHISTORY).filter(TRANSFERHISTORY.SOURCE_PATH == file_path,
-                                                     TRANSFERHISTORY.SOURCE_FILENAME == file_name,
-                                                     TRANSFERHISTORY.TITLE == title,
-                                                     TRANSFERHISTORY.SEASON_EPISODE == se).count()
+        ret = self._db.query(TRANSFERHISTORY).filter(TRANSFERHISTORY.SOURCE_PATH == source_path,
+                                                     TRANSFERHISTORY.SOURCE_FILENAME == source_filename,
+                                                     TRANSFERHISTORY.DEST_PATH == dest_path,
+                                                     TRANSFERHISTORY.DEST_FILENAME == dest_filename).count()
         return True if ret > 0 else False
 
     @DbPersist(_db)
@@ -218,7 +221,7 @@ class DbHelper:
             dest_filename = ""
             season_episode = media_info.get_season_string()
         title = media_info.title
-        if self.is_transfer_history_exists(source_path, source_filename, title, season_episode):
+        if self.is_transfer_history_exists(source_path, source_filename, dest_path, dest_filename):
             return
         dest = dest or ""
         timestr = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
@@ -1401,7 +1404,6 @@ class DbHelper:
         if date_ret and date_ret[0][0]:
             total_upload = 0
             total_download = 0
-            ret_sites = []
             ret_site_uploads = []
             ret_site_downloads = []
             min_date = date_ret[0][1]
@@ -1426,6 +1428,7 @@ class DbHelper:
                                   func.min(subquery.c.DOWNLOAD),
                                   func.max(subquery.c.UPLOAD),
                                   func.max(subquery.c.DOWNLOAD)).group_by(subquery.c.SITE).all()
+            ret_sites = []
             for ret_b in rets:
                 # 如果最小值都是0，可能时由于近几日没有更新数据，或者cookie过期，正常有数据的话，第二天能正常
                 ret_b = list(ret_b)
@@ -1851,11 +1854,11 @@ class DbHelper:
                 NOTE=item.get("free")
             ))
 
-    def get_userrss_tasks(self, taskid=None):
-        if taskid:
-            return self._db.query(CONFIGUSERRSS).filter(CONFIGUSERRSS.ID == int(taskid)).all()
+    def get_userrss_tasks(self, tid=None):
+        if tid:
+            return self._db.query(CONFIGUSERRSS).filter(CONFIGUSERRSS.ID == int(tid)).all()
         else:
-            return self._db.query(CONFIGUSERRSS).all()
+            return self._db.query(CONFIGUSERRSS).order_by(CONFIGUSERRSS.STATE.desc()).all()
 
     @DbPersist(_db)
     def delete_userrss_task(self, tid):
@@ -1869,7 +1872,7 @@ class DbHelper:
             return
         self._db.query(CONFIGUSERRSS).filter(CONFIGUSERRSS.ID == int(tid)).update(
             {
-                "PROCESS_COUNT": CONFIGUSERRSS.PROCESS_COUNT + count,
+                "PROCESS_COUNT": str(int(CONFIGUSERRSS.PROCESS_COUNT or 0) + count),
                 "UPDATE_TIME": time.strftime('%Y-%m-%d %H:%M:%S',
                                              time.localtime(time.time()))
             }
@@ -1893,7 +1896,8 @@ class DbHelper:
                     "STATE": item.get("state"),
                     "SAVE_PATH": item.get("save_path"),
                     "DOWNLOAD_SETTING": item.get("download_setting"),
-                    "NOTE": item.get("note")
+                    "RECOGNIZATION": item.get("recognization"),
+                    "NOTE": ""
                 }
             )
         else:
@@ -1911,7 +1915,32 @@ class DbHelper:
                 STATE=item.get("state"),
                 SAVE_PATH=item.get("save_path"),
                 DOWNLOAD_SETTING=item.get("download_setting"),
+                RECOGNIZATION=item.get("recognization"),
+                PROCESS_COUNT='0'
             ))
+
+    def insert_userrss_mediainfos(self, tid=None, mediainfo=None):
+        if not tid or not mediainfo:
+            return
+        taskinfo = self._db.query(CONFIGUSERRSS).filter(CONFIGUSERRSS.ID == int(tid)).all()
+        if not taskinfo:
+            return
+        mediainfos = json.loads(taskinfo[0].MEDIAINFOS) if taskinfo[0].MEDIAINFOS else []
+        tmdbid = str(mediainfo.tmdb_id)
+        season = int(mediainfo.get_season_seq())
+        for media in mediainfos:
+            if media.get("id") == tmdbid and media.get("season") == season:
+                return
+        mediainfos.append({
+            "id": tmdbid,
+            "rssid": "",
+            "season": season,
+            "name": mediainfo.title
+        })
+        self._db.query(CONFIGUSERRSS).filter(CONFIGUSERRSS.ID == int(tid)).update(
+            {
+                "MEDIAINFOS": json.dumps(mediainfos)
+            })
 
     def get_userrss_parser(self, pid=None):
         if pid:

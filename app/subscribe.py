@@ -9,6 +9,8 @@ from app.media import Media
 from app.media.meta import MetaInfo
 from app.message import Message
 from app.searcher import Searcher
+from app.sites import Sites
+from app.indexer import Indexer
 from app.utils.types import MediaType, SearchType
 
 lock = Lock()
@@ -21,6 +23,8 @@ class Subscribe:
     message = None
     media = None
     downloader = None
+    sites = None
+    douban = None
 
     def __init__(self):
         self.dbhelper = DbHelper()
@@ -29,6 +33,9 @@ class Subscribe:
         self.message = Message()
         self.media = Media()
         self.downloader = Downloader()
+        self.sites = Sites()
+        self.douban = DouBan()
+        self.indexer = Indexer()
 
     def add_rss_subscribe(self, mtype, name, year,
                           season=None,
@@ -81,7 +88,7 @@ class Subscribe:
         filter_rule = int(filter_rule) if str(filter_rule).isdigit() else None
         total_ep = int(total_ep) if str(total_ep).isdigit() else None
         current_ep = int(current_ep) if str(current_ep).isdigit() else None
-        download_setting = int(download_setting) if str(download_setting).isdigit() else 0
+        download_setting = int(download_setting) if str(download_setting).isdigit() else ""
         fuzzy_match = True if fuzzy_match else False
         # 检索媒体信息
         if not fuzzy_match:
@@ -106,9 +113,9 @@ class Subscribe:
                     tmdbid = media_info.tmdb_id
                 elif doubanid:
                     # 先从豆瓣网页抓取（含TMDBID）
-                    douban_info = DouBan().get_media_detail_from_web(doubanid)
+                    douban_info = self.douban.get_media_detail_from_web(doubanid)
                     if not douban_info:
-                        douban_info = DouBan().get_douban_detail(doubanid=doubanid, mtype=mtype)
+                        douban_info = self.douban.get_douban_detail(doubanid=doubanid, mtype=mtype)
                     if not douban_info or douban_info.get("localized_message"):
                         return 1, "无法查询到豆瓣媒体信息", None
                     media_info = MetaInfo(title="%s %s".strip() % (douban_info.get('title'), year), mtype=mtype)
@@ -294,7 +301,7 @@ class Subscribe:
 
         # 发送订阅完成的消息
         if media:
-            Message().send_rss_finished_message(media_info=media)
+            self.message.send_rss_finished_message(media_info=media)
 
     def get_subscribe_movies(self, rid=None, state=None):
         """
@@ -302,14 +309,14 @@ class Subscribe:
         """
         ret_dict = {}
         rss_movies = self.dbhelper.get_rss_movies(rssid=rid, state=state)
+        rss_sites_valid = self.sites.get_site_names(rss=True)
+        search_sites_valid = self.indexer.get_indexer_names()
         for rss_movie in rss_movies:
             desc = rss_movie.DESC
             note = rss_movie.NOTE
             tmdbid = rss_movie.TMDBID
-            rss_sites = rss_movie.RSS_SITES
-            rss_sites = json.loads(rss_sites) if rss_sites else []
-            search_sites = rss_movie.SEARCH_SITES
-            search_sites = json.loads(search_sites) if search_sites else []
+            rss_sites = json.loads(rss_movie.RSS_SITES) if rss_movie.RSS_SITES else []
+            search_sites = json.loads(rss_movie.SEARCH_SITES) if rss_movie.SEARCH_SITES else []
             over_edition = True if rss_movie.OVER_EDITION == 1 else False
             filter_restype = rss_movie.FILTER_RESTYPE
             filter_pix = rss_movie.FILTER_PIX
@@ -328,13 +335,15 @@ class Subscribe:
                 filter_pix = desc.get("pix")
                 filter_team = desc.get("team")
                 filter_rule = desc.get("rule")
-                download_setting = 0
+                download_setting = ""
                 save_path = ""
                 fuzzy_match = False if tmdbid else True
             if note:
                 note_info = self.__parse_rss_desc(note)
             else:
                 note_info = {}
+            rss_sites = [site for site in rss_sites if site in rss_sites_valid]
+            search_sites = [site for site in search_sites if site in search_sites_valid]
             ret_dict[str(rss_movie.ID)] = {
                 "id": rss_movie.ID,
                 "name": rss_movie.NAME,
@@ -363,6 +372,8 @@ class Subscribe:
     def get_subscribe_tvs(self, rid=None, state=None):
         ret_dict = {}
         rss_tvs = self.dbhelper.get_rss_tvs(rssid=rid, state=state)
+        rss_sites_valid = self.sites.get_site_names(rss=True)
+        search_sites_valid = self.indexer.get_indexer_names()
         for rss_tv in rss_tvs:
             desc = rss_tv.DESC
             note = rss_tv.NOTE
@@ -390,7 +401,7 @@ class Subscribe:
                 filter_team = desc.get("team")
                 filter_rule = desc.get("rule")
                 save_path = ""
-                download_setting = 0
+                download_setting = ""
                 total_ep = desc.get("total")
                 current_ep = desc.get("current")
                 fuzzy_match = False if tmdbid else True
@@ -398,6 +409,8 @@ class Subscribe:
                 note_info = self.__parse_rss_desc(note)
             else:
                 note_info = {}
+            rss_sites = [site for site in rss_sites if site in rss_sites_valid]
+            search_sites = [site for site in search_sites if site in search_sites_valid]
             ret_dict[str(rss_tv.ID)] = {
                 "id": rss_tv.ID,
                 "name": rss_tv.NAME,
