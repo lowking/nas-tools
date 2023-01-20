@@ -537,4 +537,3 @@ class Message(object):
         return [info.get("search_type")
                 for info in ModuleConf.MESSAGE_DICT.get('client').values()
                 if info.get('search_type')]
-

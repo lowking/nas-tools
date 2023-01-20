@@ -130,8 +130,6 @@ class Rss:
                         enclosure = article.get('enclosure')
                         # 种子页面
                         page_url = article.get('link')
-                        # 副标题
-                        description = article.get('description')
                         # 种子大小
                         size = article.get('size')
                         # 开始处理
@@ -141,7 +139,7 @@ class Rss:
                             log.info(f"【Rss】{title} 已成功订阅过")
                             continue
                         # 识别种子名称，开始检索TMDB
-                        media_info = MetaInfo(title=title, subtitle=description)
+                        media_info = MetaInfo(title=title)
                         cache_info = self.media.get_cache_info(media_info)
                         if cache_info.get("id"):
                             # 使用缓存信息
@@ -151,7 +149,7 @@ class Rss:
                             media_info.year = cache_info.get("year")
                         else:
                             # 重新查询TMDB
-                            media_info = self.media.get_media_info(title=title, subtitle=description)
+                            media_info = self.media.get_media_info(title=title)
                             if not media_info:
                                 log.warn(f"【Rss】{title} 无法识别出媒体信息！")
                                 continue
@@ -256,8 +254,7 @@ class Rss:
                         media_info.set_torrent_info(res_order=match_info.get("res_order"),
                                                     download_volume_factor=match_info.get("download_volume_factor"),
                                                     upload_volume_factor=match_info.get("upload_volume_factor"),
-                                                    rssid=match_info.get("id"),
-                                                    description=description)
+                                                    rssid=match_info.get("id"))
                         media_info.set_download_info(download_setting=match_info.get("download_setting"),
                                                      save_path=match_info.get("save_path"))
                         # 插入数据库

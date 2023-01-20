@@ -362,10 +362,12 @@ def rss_calendar():
 def sites():
     CfgSites = Sites().get_sites()
     RuleGroups = {str(group["id"]): group["name"] for group in Filter().get_rule_groups()}
+    DownloadSettings = {id: attr["name"] for id, attr in Downloader().get_download_setting().items()}
     ChromeOk = ChromeHelper().get_status()
     return render_template("site/site.html",
                            Sites=CfgSites,
                            RuleGroups=RuleGroups,
+                           DownloadSettings=DownloadSettings,
                            ChromeOk=ChromeOk)
 
 
@@ -596,7 +598,9 @@ def service():
 
         search_rss_interval = pt.get('search_rss_interval')
         if str(search_rss_interval).isdigit():
-            tim_rsssearch = str(int(search_rss_interval)) + " 天"
+            if int(search_rss_interval) < 6:
+                search_rss_interval = 6
+            tim_rsssearch = str(int(search_rss_interval)) + " 小时"
             rss_search_state = 'ON'
         else:
             tim_rsssearch = ""
@@ -1048,13 +1052,17 @@ def filterrule():
 def user_rss():
     Tasks = RssChecker().get_rsstask_info()
     RssParsers = RssChecker().get_userrss_parser()
-    FilterRules = Filter().get_rule_groups()
-    DownloadSettings = Downloader().get_download_setting()
+    RuleGroups = {str(group["id"]): group["name"] for group in Filter().get_rule_groups()}
+    DownloadSettings = {id: attr["name"] for id, attr in Downloader().get_download_setting().items()}
+    RestypeDict = ModuleConf.TORRENT_SEARCH_PARAMS.get("restype")
+    PixDict = ModuleConf.TORRENT_SEARCH_PARAMS.get("pix")
     return render_template("rss/user_rss.html",
                            Tasks=Tasks,
                            Count=len(Tasks),
                            RssParsers=RssParsers,
-                           FilterRules=FilterRules,
+                           RuleGroups=RuleGroups,
+                           RestypeDict=RestypeDict,
+                           PixDict=PixDict,
                            DownloadSettings=DownloadSettings)
 
 
