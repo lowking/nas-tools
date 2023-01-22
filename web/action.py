@@ -22,7 +22,7 @@ from app.downloader.client import Qbittorrent, Transmission
 from app.filetransfer import FileTransfer
 from app.filter import Filter
 from app.helper import DbHelper, ProgressHelper, ThreadHelper, \
-    MetaHelper, DisplayHelper, WordsHelper
+    MetaHelper, DisplayHelper, WordsHelper, CookieCloudHelper
 from app.indexer import Indexer
 from app.media import Category, Media
 from app.media.bangumi import Bangumi
@@ -198,7 +198,8 @@ class WebAction:
             "list_brushtask_torrents": self.__list_brushtask_torrents,
             "set_system_config": self.__set_system_config,
             "get_site_user_statistics": self.get_site_user_statistics,
-            "send_custom_message": self.send_custom_message
+            "send_custom_message": self.send_custom_message,
+            "cookiecloud_sync": self.__cookiecloud_sync
         }
 
     def action(self, cmd, data=None):
@@ -254,7 +255,7 @@ class WebAction:
             os.system("pm2 restart NAStool")
 
     @staticmethod
-    def handle_message_job(msg, client, in_from=SearchType.OT, user_id=None, user_name=None):
+    def handle_message_job(msg, in_from=SearchType.OT, user_id=None, user_name=None):
         """
         处理消息事件
         """
@@ -272,20 +273,10 @@ class WebAction:
         message = Message()
 
         if command:
-            if in_from == SearchType.TG:
-                if str(user_id) not in client.get("client").get_admin():
-                    message.send_channel_msg(channel=in_from, title="只有管理员才有权限执行此命令", user_id=user_id)
-                    return
             # 启动服务
             ThreadHelper().start_thread(command.get("func"), ())
             message.send_channel_msg(channel=in_from, title="正在运行 %s ..." % command.get("desp"), user_id=user_id)
         else:
-            # 检查用户权限
-            if in_from == SearchType.TG:
-                if not str(user_id) in client.get("client").get_users():
-                    message.send_channel_msg(channel=in_from, title="你不在用户白名单中，无法使用此机器人",
-                                             user_id=user_id)
-                    return
             # 站点检索或者添加订阅
             ThreadHelper().start_thread(search_media_by_message, (msg, in_from, user_id, user_name))
 
@@ -1301,6 +1292,7 @@ class WebAction:
         _subscribe = Subscribe()
         mtype = data.get("type")
         year = data.get("year")
+        keyword = data.get("keyword")
         season = data.get("season")
         fuzzy_match = data.get("fuzzy_match")
         doubanid = data.get("doubanid")
@@ -1330,6 +1322,7 @@ class WebAction:
                 code, msg, media_info = _subscribe.add_rss_subscribe(mtype=mtype,
                                                                      name=name,
                                                                      year=year,
+                                                                     keyword=keyword,
                                                                      season=sea,
                                                                      fuzzy_match=fuzzy_match,
                                                                      doubanid=doubanid,
@@ -1350,6 +1343,7 @@ class WebAction:
             code, msg, media_info = _subscribe.add_rss_subscribe(mtype=mtype,
                                                                  name=name,
                                                                  year=year,
+                                                                 keyword=keyword,
                                                                  season=season,
                                                                  fuzzy_match=fuzzy_match,
                                                                  doubanid=doubanid,
@@ -3570,69 +3564,11 @@ class WebAction:
         """
         查询正在下载的任务
         """
-        Client, Torrents = Downloader().get_downloading_torrents()
-        DispTorrents = []
-        for torrent in Torrents:
-            if Client == DownloaderType.QB:
-                name = torrent.get('name')
-                # 进度
-                progress = round(torrent.get('progress') * 100, 1)
-                if torrent.get('state') in ['pausedDL']:
-                    state = "Stoped"
-                    speed = "已暂停"
-                else:
-                    state = "Downloading"
-                    dlspeed = StringUtils.str_filesize(torrent.get('dlspeed'))
-                    upspeed = StringUtils.str_filesize(torrent.get('upspeed'))
-                    if progress >= 100:
-                        speed = "%s%sB/s %s%sB/s" % (chr(8595), dlspeed, chr(8593), upspeed)
-                    else:
-                        eta = StringUtils.str_timelong(torrent.get('eta'))
-                        speed = "%s%sB/s %s%sB/s %s" % (chr(8595), dlspeed, chr(8593), upspeed, eta)
-                # 主键
-                key = torrent.get('hash')
-            elif Client == DownloaderType.Client115:
-                name = torrent.get('name')
-                # 进度
-                progress = round(torrent.get('percentDone'), 1)
-                state = "Downloading"
-                dlspeed = StringUtils.str_filesize(torrent.get('peers'))
-                upspeed = StringUtils.str_filesize(torrent.get('rateDownload'))
-                speed = "%s%sB/s %s%sB/s" % (chr(8595), dlspeed, chr(8593), upspeed)
-                # 主键
-                key = torrent.get('info_hash')
-            elif Client == DownloaderType.Aria2:
-                name = torrent.get('bittorrent', {}).get('info', {}).get("name")
-                # 进度
-                try:
-                    progress = round(int(torrent.get('completedLength')) / int(torrent.get("totalLength")), 1) * 100
-                except ZeroDivisionError:
-                    progress = 0.0
-                state = "Downloading"
-                dlspeed = StringUtils.str_filesize(torrent.get('downloadSpeed'))
-                upspeed = StringUtils.str_filesize(torrent.get('uploadSpeed'))
-                speed = "%s%sB/s %s%sB/s" % (chr(8595), dlspeed, chr(8593), upspeed)
-                # 主键
-                key = torrent.get('gid')
-            else:
-                name = torrent.name
-                if torrent.status in ['stopped']:
-                    state = "Stoped"
-                    speed = "已暂停"
-                else:
-                    state = "Downloading"
-                    dlspeed = StringUtils.str_filesize(torrent.rateDownload)
-                    upspeed = StringUtils.str_filesize(torrent.rateUpload)
-                    speed = "%s%sB/s %s%sB/s" % (chr(8595), dlspeed, chr(8593), upspeed)
-                # 进度
-                progress = round(torrent.progress)
-                # 主键
-                key = torrent.id
-
-            if not name:
-                continue
+        torrents = Downloader().get_downloading_progress()
+        MediaHander = Media()
+        for torrent in torrents:
             # 识别
-            media_info = Media().get_media_info(title=name)
+            media_info = MediaHander.get_media_info(title=torrent.get("name"))
             if not media_info:
                 continue
             if not media_info.tmdb_info:
@@ -3644,12 +3580,11 @@ class WebAction:
             else:
                 title = "%s %s" % (media_info.get_title_string(), media_info.get_season_episode_string())
             poster_path = media_info.get_poster_image()
-            torrent_info = {'id': key, 'title': title, 'speed': speed, 'image': poster_path or "", 'state': state,
-                            'progress': progress}
-            if torrent_info not in DispTorrents:
-                DispTorrents.append(torrent_info)
-
-        return {"code": 0, "result": DispTorrents}
+            torrent.update({
+                "title": title,
+                "image": poster_path or ""
+            })
+        return {"code": 0, "result": torrents}
 
     def get_transfer_history(self, data):
         """
@@ -4111,7 +4046,11 @@ class WebAction:
         """
         获取下载目录
         """
-        dirs = Downloader().get_download_dirs(setting=data.get("sid"))
+        sid = data.get("sid")
+        site = data.get("site")
+        if not sid and site:
+            sid = Sites().get_site_download_setting(site_name=site)
+        dirs = Downloader().get_download_dirs(setting=sid)
         return {"code": 0, "paths": dirs}
 
     @staticmethod
@@ -4265,7 +4204,6 @@ class WebAction:
             return {"code": 1}
         try:
             SystemConfig().set_system_config(key=key, value=value)
-            SystemConfig().init_config()
             return {"code": 0}
         except Exception as e:
             ExceptionUtils.exception_traceback(e)
@@ -4310,3 +4248,44 @@ class WebAction:
             "value": value,
             "name": name.value
         } for value, name in RmtModes.items()]
+
+    def __cookiecloud_sync(self, data):
+        """
+        CookieCloud数据同步
+        """
+        server = data.get("server")
+        key = data.get("key")
+        password = data.get("password")
+        # 保存设置
+        SystemConfig().set_system_config(key="CookieCloud",
+                                         value={
+                                             "server": server,
+                                             "key": key,
+                                             "password": password
+                                         })
+        # 同步数据
+        contents, retmsg = CookieCloudHelper(server=server,
+                                             key=key,
+                                             password=password).download_data()
+        if not contents:
+            return {"code": 1, "msg": retmsg}
+        success_count = 0
+        for domain, content_list in contents.items():
+            if domain.startswith('.'):
+                domain = domain[1:]
+            cookie_str = ""
+            for content in content_list:
+                cookie_str += content.get("name") + "=" + content.get("value") + ";"
+            if not cookie_str:
+                continue
+            site_info = Sites().get_sites(siteurl=domain)
+            if not site_info:
+                continue
+            self.dbhelper.update_site_cookie_ua(tid=site_info.get("id"),
+                                                cookie=cookie_str)
+            success_count += 1
+        if success_count:
+            # 重载站点信息
+            Sites().init_config()
+            return {"code": 0, "msg": f"成功更新 {success_count} 个站点的Cookie数据"}
+        return {"code": 0, "msg": "同步完成，但未更新任何站点的Cookie！"}

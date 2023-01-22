@@ -24,12 +24,14 @@ export class NormalCard extends observeState(CustomElement) {
     lazy: {},
     _placeholder: { state: true },
     _card_id: { state: true },
+    _card_image_error: { state: true },
   };
 
   constructor() {
     super();
     this.lazy = "0";
     this._placeholder = true;
+    this._card_image_error = false;
     this._card_id = Symbol("normalCard_data_card_id");
   }
 
@@ -112,30 +114,33 @@ export class NormalCard extends observeState(CustomElement) {
   render() {
     return html`
       <style>
-        .lit-person-card-scale:hover {
+        .lit-normal-card {
+          position:relative;
+          z-index:1;
+          --tblr-aspect-ratio:150%;
+          border:none;
+        }
+        .lit-normal-card:hover {
           transform:scale(1.05, 1.05);
-          opacity:1
+          opacity:1;
         }
       </style>
-      <div class="card card-sm lit-person-card-scale rounded-4 border-1 shadow-sm overflow-hidden"
-           style="--tblr-border-opacity: 1;border-color: rgb(128, 128, 128);position:relative;z-index:1;"
+      <div class="card card-sm lit-normal-card rounded-4 cursor-pointer ratio shadow-sm"
            @click=${() => { if (Golbal.is_touch_device()){ cardState.more_id = this._card_id } } }
            @mouseenter=${() => { if (!Golbal.is_touch_device()){ cardState.more_id = this._card_id } } }
            @mouseleave=${() => { if (!Golbal.is_touch_device()){ cardState.more_id = undefined } } }>
         ${this._placeholder ? NormalCardPlaceholder.render_placeholder() : nothing}
-        <div ?hidden=${this._placeholder}>
-          <div class="ratio" style="--tblr-aspect-ratio: 150%">
-            <img class="card-img" alt=""
-                 src=${this.lazy == "1" ? "" : this.image ?? Golbal.noImage}
-                 @error=${() => { if (this.lazy != "1") {this.image = Golbal.noImage} }}
-                 @load=${() => { this._placeholder = false }}/>
-          </div>
+        <div ?hidden=${this._placeholder} class="rounded-4">
+          <img class="card-img rounded-4" alt="" style="box-shadow:0 0 0 1px #888888; display: block; min-width: 100%; max-width: 100%; min-height: 100%; max-height: 100%; object-fit: cover;"
+             src=${this.lazy == "1" ? "" : this.image ?? Golbal.noImage}
+             @error=${() => { if (this.lazy != "1") {this.image = Golbal.noImage; this._card_image_error = true} }}
+             @load=${() => { this._placeholder = false }}/>
           ${this._render_left_up()}
           ${this._render_right_up()}
         </div>
-        <div ?hidden=${cardState.more_id != this._card_id}
-             class="card-img-overlay ms-auto"
-             style="background-color: rgba(0, 0, 0, 0.5)"
+        <div ?hidden=${cardState.more_id != this._card_id && this._card_image_error == false}
+             class="card-img-overlay rounded-4 ms-auto"
+             style="background-color: rgba(0, 0, 0, 0.5); box-shadow:0 0 0 1px #dddddd;"
              @click=${() => { show_mediainfo_modal(this.page_type, this.title, this.year, this.tmdb_id) }}>
           <div style="cursor: pointer">
             ${this.year ? html`<div class="text-white"><strong>${this.site ? this.site : this.year}</strong></div>` : nothing }

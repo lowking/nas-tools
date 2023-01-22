@@ -228,7 +228,7 @@
                                             </span>
                                           </div>
                                           <div class="col">
-                                            <a href='javascript:show_download_modal("{{ torrent.id }}","【{{ torrent.site }}】{{ torrent.torrent_name }}")'>{{ torrent.torrent_name }}</a>
+                                            <a href='javascript:show_download_modal("{{ torrent.id }}","【{{ torrent.site }}】{{ torrent.torrent_name }}","{{ torrent.site }}")'>{{ torrent.torrent_name }}</a>
                                             <div class="text-muted">
                                               {{ torrent.description or '' }}
                                             </div>
@@ -262,7 +262,7 @@
                                             </div>
                                           </div>
                                           <div class="col-auto ms-2 d-none d-md-inline-block">
-                                            <a href='javascript:show_download_modal("{{ torrent.id }}","【{{ torrent.site }}】{{ torrent.torrent_name }}")' class="link-secondary" title="下载">
+                                            <a href='javascript:show_download_modal("{{ torrent.id }}","【{{ torrent.site }}】{{ torrent.torrent_name }}","{{ torrent.site }}")' class="link-secondary" title="下载">
                                               {{ SVG.download() }}
                                             </a>
                                           </div>
@@ -661,9 +661,13 @@
 
   // 过滤媒体展示
   function filter_medias(obj, key, modal) {
-    // 选中当前项
-    select_SelectALL(false, $(obj).attr("name"));
-    $(obj).prop("checked", true);
+    // 按钮状态
+    let btn_obj = $(obj);
+    let status = btn_obj.prop("checked");
+    // 当前项未选中则选中,已选中则取消选中
+    select_SelectALL(false, btn_obj.attr("name"));
+    btn_obj.prop("checked", status);
+
     // 开始过滤
     filter_do(key, modal);
   }

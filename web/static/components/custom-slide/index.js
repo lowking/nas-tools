@@ -35,7 +35,7 @@ export class CustomSlide extends CustomElement {
         .media-slide-card-number{
           position: relative;
           flex:0 0 auto;
-          width:45.45454545454545%;
+          width:48%;
         }
         @media (min-width: 768px) {
           .media-slide-card-number{
@@ -62,7 +62,7 @@ export class CustomSlide extends CustomElement {
         <div class="page-header d-print-none">
           <div class="d-flex justify-content-between">
             <div class="d-inline-flex">
-              <a class="nav-link" href=${this.slide_card.length == 0 ? "javascript:void(0)" : this.slide_click}>
+              <a class="nav-link ms-2" href=${this.slide_card.length == 0 ? "javascript:void(0)" : this.slide_click}>
                 <h2 class="my-1">
                   <strong>${this.slide_card.length == 0 ? "加载中.." : this.slide_title}</strong>
                 </h2>
@@ -100,9 +100,9 @@ export class CustomSlide extends CustomElement {
             </div>
           </div>
         </div>
-        <div class="media-slide-hide-scrollbar p-2"
+        <div class="media-slide-hide-scrollbar px-2 py-3"
             @scroll=${ this._countDisabled }>
-          <div class="row row-cards d-flex flex-row flex-nowrap media-slide-card-number">
+          <div class="row d-flex flex-row flex-nowrap media-slide-card-number">
             ${this.slide_card}
           </div>
         </div>
