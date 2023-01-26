@@ -1,5 +1,5 @@
 import { html } from "../utility/lit-core.min.js";
-import { CustomElement } from "../utility/utility.js";
+import { CustomElement, Golbal } from "../utility/utility.js";
 
 export class PersonCard extends CustomElement {
 
@@ -24,14 +24,14 @@ export class PersonCard extends CustomElement {
           z-index:1;
           --tblr-aspect-ratio:150%;
           border:none;
-          box-shadow:0 0 0 1px #888888,0 .125rem .25rem rgba(0,0,0,0.2);
+          box-shadow:0 0 0 1px #888888 inset,0 .125rem .25rem rgba(0,0,0,0.2);
           background-image:linear-gradient(45deg,#99999b,#637599 60%);
         }
         .lit-person-card:hover {
           transform:scale(1.05, 1.05);
           opacity:1;
           box-shadow:0 0 0 1px #bbbbbb;
-          background-image:linear-gradient(45deg,#bbbbbd,#8597aa 60%);
+          background-image:linear-gradient(45deg,#bbbbbd,#8597aa 60%) inset;
         }
       </style>
       <div class="card card-sm lit-person-card rounded-4 overflow-hidden cursor-pointer ratio">
@@ -40,6 +40,7 @@ export class PersonCard extends CustomElement {
             <custom-img
               lazy=${this.lazy}
               img-src=${this.person_image}
+              img-noimage=${Golbal.noImage_person}
               img-ratio="100%"
               img-style="object-fit:cover;"
             ></custom-img>

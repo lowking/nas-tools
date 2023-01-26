@@ -33,7 +33,7 @@ from app.sites import Sites
 from app.subscribe import Subscribe
 from app.sync import Sync
 from app.torrentremover import TorrentRemover
-from app.utils import DomUtils, SystemUtils, WebUtils, ExceptionUtils, StringUtils
+from app.utils import DomUtils, SystemUtils, ExceptionUtils, StringUtils
 from app.utils.types import *
 from config import PT_TRANSFER_INTERVAL, Config
 from web.action import WebAction
@@ -41,6 +41,7 @@ from web.apiv1 import apiv1_bp
 from web.backend.WXBizMsgCrypt3 import WXBizMsgCrypt
 from web.backend.user import User
 from web.backend.wallpaper import get_login_wallpaper
+from web.backend.web_utils import WebUtils
 from web.security import require_auth
 
 # 配置文件锁
@@ -408,13 +409,23 @@ def resources():
 @App.route('/recommend', methods=['POST', 'GET'])
 @login_required
 def recommend():
-    RecommendType = request.args.get("t")
+    Type = request.args.get("type")
+    SubType = request.args.get("subtype")
+    Title = request.args.get("title")
+    SubTitle = request.args.get("subtitle")
     CurrentPage = request.args.get("page") or 1
     Week = request.args.get("week") or None
+    TmdbId = request.args.get("tmdbid") or None
+    PersonId = request.args.get("personid") or None
     return render_template("discovery/recommend.html",
-                           RecommendType=RecommendType,
+                           Type=Type,
+                           SubType=SubType,
+                           Title=Title,
                            CurrentPage=CurrentPage,
-                           Week=Week)
+                           Week=Week,
+                           TmdbId=TmdbId,
+                           PersonId=PersonId,
+                           SubTitle=SubTitle)
 
 
 # 电影推荐页面
@@ -422,7 +433,7 @@ def recommend():
 @login_required
 def discovery_movie():
     return render_template("discovery/discovery.html",
-                           DiscoveryType="movie")
+                           DiscoveryType="MOV")
 
 
 # 电视剧推荐页面
@@ -430,7 +441,7 @@ def discovery_movie():
 @login_required
 def discovery_tv():
     return render_template("discovery/discovery.html",
-                           DiscoveryType="tv")
+                           DiscoveryType="TV")
 
 
 # Bangumi每日放送
@@ -438,7 +449,35 @@ def discovery_tv():
 @login_required
 def discovery_bangumi():
     return render_template("discovery/discovery.html",
-                           DiscoveryType="bangumi")
+                           DiscoveryType="BANGUMI")
+
+
+# 媒体详情页面
+@App.route('/discovery_detail', methods=['POST', 'GET'])
+@login_required
+def discovery_detail():
+    TmdbId = request.args.get("id")
+    Type = request.args.get("type")
+    Fav = request.args.get("fav")
+    return render_template("discovery/mediainfo.html",
+                           TmdbId=TmdbId,
+                           Type=Type,
+                           Fav=Fav)
+
+
+# 演职人员页面
+@App.route('/discovery_person', methods=['POST', 'GET'])
+@login_required
+def discovery_person():
+    TmdbId = request.args.get("tmdbid")
+    Title = request.args.get("title")
+    SubTitle = request.args.get("subtitle")
+    Type = request.args.get("type")
+    return render_template("discovery/person.html",
+                           TmdbId=TmdbId,
+                           Title=Title,
+                           SubTitle=SubTitle,
+                           Type=Type)
 
 
 # 正在下载页面
@@ -1567,7 +1606,7 @@ def subscribe():
         code, msg, meta_info = Subscribe().add_rss_subscribe(mtype=media_type,
                                                              name=meta_info.get_name(),
                                                              year=meta_info.year,
-                                                             tmdbid=tmdbId)
+                                                             mediaid=tmdbId)
         meta_info.user_name = req_json.get("request", {}).get("requestedBy_username")
         Message().send_rss_success_message(in_from=SearchType.API,
                                            media_info=meta_info)
@@ -1581,7 +1620,7 @@ def subscribe():
             code, msg, meta_info = Subscribe().add_rss_subscribe(mtype=media_type,
                                                                  name=meta_info.get_name(),
                                                                  year=meta_info.year,
-                                                                 tmdbid=tmdbId,
+                                                                 mediaid=tmdbId,
                                                                  season=season)
             Message().send_rss_success_message(in_from=SearchType.API,
                                                media_info=meta_info)

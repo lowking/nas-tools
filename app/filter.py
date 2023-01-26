@@ -89,7 +89,7 @@ class Filter:
         """
         if not rulegroup:
             rulegroup = self.get_rule_groups(default=True)
-        first_order = min([rule_info.get("pri") for rule_info in self.get_rules(groupid=rulegroup)] or [0])
+        first_order = min([int(rule_info.get("pri")) for rule_info in self.get_rules(groupid=rulegroup)] or [0])
         return 100 - first_order
 
     def check_rules(self, meta_info, rulegroup=None):
@@ -150,6 +150,7 @@ class Filter:
             # 大小
             sizes = filter_info.get('size')
             if sizes and rule_match and meta_info.size:
+                meta_info.size = StringUtils.num_filesize(meta_info.size)
                 if sizes.find(',') != -1:
                     sizes = sizes.split(',')
                     if sizes[0].isdigit():

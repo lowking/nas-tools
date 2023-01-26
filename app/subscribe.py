@@ -13,6 +13,7 @@ from app.searcher import Searcher
 from app.sites import Sites
 from app.indexer import Indexer
 from app.utils.types import MediaType, SearchType
+from web.backend.web_utils import WebUtils
 
 lock = Lock()
 
@@ -44,8 +45,7 @@ class Subscribe:
                           keyword=None,
                           season=None,
                           fuzzy_match=False,
-                          doubanid=None,
-                          tmdbid=None,
+                          mediaid=None,
                           rss_sites=None,
                           search_sites=None,
                           over_edition=False,
@@ -67,8 +67,7 @@ class Subscribe:
         :param keyword: 自定义搜索词
         :param season: 第几季，数字
         :param fuzzy_match: 是否模糊匹配
-        :param doubanid: 豆瓣ID，有此ID时从豆瓣查询信息
-        :param tmdbid: TMDBID，有此ID时优先使用ID查询TMDB信息，没有则使用名称查询
+        :param mediaid: 媒体ID，DB:/BG:/TMDBID
         :param rss_sites: 订阅站点列表，为空则表示全部站点
         :param search_sites: 搜索站点列表，为空则表示全部站点
         :param over_edition: 是否选版
@@ -93,77 +92,49 @@ class Subscribe:
         filter_rule = int(filter_rule) if str(filter_rule).isdigit() else None
         total_ep = int(total_ep) if str(total_ep).isdigit() else None
         current_ep = int(current_ep) if str(current_ep).isdigit() else None
-        download_setting = int(download_setting) if str(download_setting).isdigit() else ""
+        download_setting = int(download_setting) if str(download_setting).replace("-", "").isdigit() else ""
         fuzzy_match = True if fuzzy_match else False
         # 检索媒体信息
         if not fuzzy_match:
             # 根据TMDBID查询，从推荐加订阅的情况
-            if season:
-                title = "%s %s 第%s季".strip() % (name, year, season)
-            else:
-                title = "%s %s".strip() % (name, year)
-            if tmdbid:
-                # 根据TMDBID查询
-                media_info = MetaInfo(title=title, mtype=mtype)
-                media_info.set_tmdb_info(self.media.get_tmdb_info(mtype=mtype, tmdbid=tmdbid))
-                if not media_info.tmdb_info:
-                    return 1, "无法查询到媒体信息", None
+            if mediaid:
+                # 根据ID查询
+                media_info = WebUtils.get_mediainfo_from_id(mtype=mtype, mediaid=mediaid)
             else:
                 # 根据名称和年份查询
+                if season:
+                    title = "%s %s 第%s季".strip() % (name, year, season)
+                else:
+                    title = "%s %s".strip() % (name, year)
                 media_info = self.media.get_media_info(title=title,
                                                        mtype=mtype,
                                                        strict=True if year else False,
                                                        cache=False)
-                if media_info and media_info.tmdb_info:
-                    tmdbid = media_info.tmdb_id
-                elif doubanid:
-                    # 先从豆瓣网页抓取（含TMDBID）
-                    douban_info = self.douban.get_media_detail_from_web(doubanid)
-                    if not douban_info:
-                        douban_info = self.douban.get_douban_detail(doubanid=doubanid, mtype=mtype)
-                    if not douban_info or douban_info.get("localized_message"):
-                        return 1, "无法查询到豆瓣媒体信息", None
-                    media_info = MetaInfo(title="%s %s".strip() % (douban_info.get('title'), year), mtype=mtype)
-                    # 以IMDBID查询TMDB
-                    if douban_info.get("imdbid"):
-                        tmdbid = self.media.get_tmdbid_by_imdbid(douban_info.get("imdbid"))
-                        if tmdbid:
-                            media_info.set_tmdb_info(self.media.get_tmdb_info(mtype=mtype, tmdbid=tmdbid))
-                    # 无法识别TMDB时以豆瓣信息订阅
-                    if not media_info.tmdb_info:
-                        media_info.title = douban_info.get('title')
-                        media_info.year = douban_info.get("year")
-                        media_info.type = mtype
-                        media_info.backdrop_path = douban_info.get("cover_url")
-                        media_info.tmdb_id = "DB:%s" % doubanid
-                        media_info.overview = douban_info.get("intro")
-                        media_info.total_episodes = douban_info.get("episodes_count")
-                    # 合并季
-                    if season:
-                        media_info.begin_season = int(season)
-                else:
-                    return 1, "无法查询到媒体信息", None
+            # 检查TMDB信息
+            if not media_info or not media_info.tmdb_info:
+                return 1, "无法TMDB查询到媒体信息", None
             # 添加订阅
             if media_info.type != MediaType.MOVIE:
-                if tmdbid:
-                    if season or media_info.begin_season is not None:
-                        season = int(season) if season else media_info.begin_season
-                        total_episode = self.media.get_tmdb_season_episodes_num(sea=season, tmdbid=tmdbid)
-                    else:
-                        # 查询季及集信息
-                        total_seasoninfo = self.media.get_tmdb_seasons_list(tmdbid=tmdbid)
-                        if not total_seasoninfo:
-                            return 2, "获取剧集信息失败", media_info
-                        # 按季号降序排序
-                        total_seasoninfo = sorted(total_seasoninfo, key=lambda x: x.get("season_number"),
-                                                  reverse=True)
-                        # 取最新季
-                        season = total_seasoninfo[0].get("season_number")
-                        total_episode = total_seasoninfo[0].get("episode_count")
-                    if not total_episode:
-                        return 3, "%s 获取剧集数失败，请确认该季是否存在" % media_info.get_title_string(), media_info
-                    media_info.begin_season = season
-                    media_info.total_episodes = total_episode
+                # 电视剧
+                if season:
+                    total_episode = self.media.get_tmdb_season_episodes_num(tv_info=media_info.tmdb_info,
+                                                                            season=int(season))
+                else:
+                    # 查询季及集信息
+                    total_seasoninfo = self.media.get_tmdb_tv_seasons(tv_info=media_info.tmdb_info)
+                    if not total_seasoninfo:
+                        return 2, "获取剧集信息失败", media_info
+                    # 按季号降序排序
+                    total_seasoninfo = sorted(total_seasoninfo,
+                                              key=lambda x: x.get("season_number"),
+                                              reverse=True)
+                    # 取最新季
+                    season = total_seasoninfo[0].get("season_number")
+                    total_episode = total_seasoninfo[0].get("episode_count")
+                if not total_episode:
+                    return 3, "第%s季获取剧集数失败，请确认该季是否存在" % season, media_info
+                media_info.begin_season = int(season)
+                media_info.total_episodes = total_episode
                 if total_ep:
                     total = total_ep
                 else:
@@ -194,6 +165,7 @@ class Subscribe:
                                                    note=self.gen_rss_note(media_info),
                                                    keyword=keyword)
             else:
+                # 电影
                 if rssid:
                     self.dbhelper.delete_rss_movie(rssid=rssid)
                 code = self.dbhelper.insert_rss_movie(media_info=media_info,
@@ -538,8 +510,8 @@ class Subscribe:
                                                cache=False)
             if media_info and media_info.tmdb_id:
                 # 获取总集数
-                total_episode = self.media.get_tmdb_season_episodes_num(sea=int(str(season).replace("S", "")),
-                                                                        tv_info=media_info.tmdb_info)
+                total_episode = self.media.get_tmdb_season_episodes_num(tv_info=media_info.tmdb_info,
+                                                                        season=int(str(season).replace("S", "")))
                 # 设置总集数的，不更新集数
                 if total_ep:
                     total_episode = total_ep
@@ -663,9 +635,9 @@ class Subscribe:
             if search_result:
                 # 洗版
                 if over_edition:
-                    if not self.update_subscribe_over_edition(rssid=rssid, media=search_result):
-                        # 更新为继续订阅状态
-                        self.dbhelper.update_rss_movie_state(rssid=rssid, state='R')
+                    self.update_subscribe_over_edition(rtype=search_result.type,
+                                                       rssid=rssid,
+                                                       media=search_result)
                 else:
                     self.finish_rss_subscribe(rssid=rssid, media=media_info)
             else:
@@ -789,9 +761,9 @@ class Subscribe:
                     and (not no_exists or not no_exists.get(media_info.tmdb_id)):
                 # 洗版
                 if over_edition:
-                    if not self.update_subscribe_over_edition(rssid=rssid, media=search_result):
-                        # 更新为继续订阅状态
-                        self.dbhelper.update_rss_tv_state(rssid=rssid, state='R')
+                    self.update_subscribe_over_edition(rtype=media_info.type,
+                                                       rssid=rssid,
+                                                       media=search_result)
                 else:
                     # 完成订阅
                     self.finish_rss_subscribe(rssid=rssid, media=media_info)
@@ -801,9 +773,22 @@ class Subscribe:
                                               media_info=media_info,
                                               seasoninfo=no_exists.get(media_info.tmdb_id))
 
-    def update_subscribe_over_edition(self, rssid, media):
+    def update_rss_state(self, rtype, rssid, state):
+        """
+        根据类型更新订阅状态
+        :param rtype: 订阅类型
+        :param rssid: 订阅ID
+        :param state: 状态 R/D/S
+        """
+        if rtype == MediaType.MOVIE:
+            self.dbhelper.update_rss_movie_state(rssid=rssid, state=state)
+        else:
+            self.dbhelper.update_rss_tv_state(rssid=rssid, state=state)
+
+    def update_subscribe_over_edition(self, rtype, rssid, media):
         """
         更新洗版订阅
+        :param rtype: 订阅类型
         :param rssid: 订阅ID
         :param media: 含订阅信息的媒体信息
         :return 完成订阅返回True，否则返回False
@@ -823,6 +808,8 @@ class Subscribe:
             # 完成洗版订阅
             self.finish_rss_subscribe(rssid=rssid, media=media)
             return True
+        else:
+            self.update_rss_state(rtype=rtype, rssid=rssid, state='R')
         return False
 
     def check_subscribe_over_edition(self, rtype, rssid, res_order):

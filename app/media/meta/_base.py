@@ -71,6 +71,8 @@ class MetaBase(object):
     original_title = None
     # 媒体发行日期
     release_date = None
+    # 播放时长
+    runtime = 0
     # 媒体年份
     year = None
     # 封面图片
@@ -85,7 +87,7 @@ class MetaBase(object):
     # TMDB 的其它信息
     tmdb_info = {}
     # 本地状态 1-已订阅 2-已存在
-    fav = 0
+    fav = "0"
     # 站点列表
     rss_sites = []
     search_sites = []
@@ -492,6 +494,7 @@ class MetaBase(object):
             self.title = info.get('title')
             self.original_title = info.get('original_title')
             self.original_language = info.get('original_language')
+            self.runtime = info.get("runtime")
             self.release_date = info.get('release_date')
             if self.release_date:
                 self.year = self.release_date[0:4]
@@ -500,6 +503,7 @@ class MetaBase(object):
             self.title = info.get('name')
             self.original_title = info.get('original_name')
             self.original_language = info.get('original_language')
+            self.runtime = info.get("episode_run_time")[0] if info.get("episode_run_time") else None
             self.release_date = info.get('first_air_date')
             if self.release_date:
                 self.year = self.release_date[0:4]

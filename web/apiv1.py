@@ -1031,8 +1031,7 @@ class SubscribeAdd(ClientResource):
     parser.add_argument('keyword', type=str, help='自定义搜索词', location='form')
     parser.add_argument('season', type=int, help='季号', location='form')
     parser.add_argument('rssid', type=int, help='已有订阅ID', location='form')
-    parser.add_argument('tmdbid', type=str, help='TMDBID', location='form')
-    parser.add_argument('doubanid', type=str, help='豆瓣ID', location='form')
+    parser.add_argument('mediaid', type=str, help='TMDBID/DB:豆瓣ID', location='form')
     parser.add_argument('fuzzy_match', type=int, help='模糊匹配（0-否/1-是）', location='form')
     parser.add_argument('rss_sites', type=list, help='RSS站点', location='form')
     parser.add_argument('search_sites', type=list, help='搜索站点', location='form')
@@ -1470,8 +1469,7 @@ class MediaCategoryList(ClientResource):
 class MediaInfo(ClientResource):
     parser = reqparse.RequestParser()
     parser.add_argument('type', type=str, help='类型（MOV/TV）', location='form', required=True)
-    parser.add_argument('id', type=str, help='TMDBID', location='form')
-    parser.add_argument('doubanid', type=str, help='豆瓣ID', location='form')
+    parser.add_argument('id', type=str, help='TMDBID/DB:豆瓣ID', location='form')
     parser.add_argument('title', type=str, help='标题', location='form')
     parser.add_argument('year', type=str, help='年份', location='form')
     parser.add_argument('rssid', type=str, help='订阅ID', location='form')
@@ -1482,6 +1480,65 @@ class MediaInfo(ClientResource):
         识别媒体信息
         """
         return WebAction().api_action(cmd='media_info', data=self.parser.parse_args())
+
+
+@media.route('/detail')
+class MediaDetail(ClientResource):
+    parser = reqparse.RequestParser()
+    parser.add_argument('type', type=str, help='类型（MOV/TV）', location='form', required=True)
+    parser.add_argument('tmdbid', type=str, help='TMDBID/DB:豆瓣ID', location='form')
+
+    @media.doc(parser=parser)
+    def post(self):
+        """
+        查询TMDB媒体详情
+        """
+        return WebAction().api_action(cmd='media_detail', data=self.parser.parse_args())
+
+
+@media.route('/similar')
+class MediaSimilar(ClientResource):
+    parser = reqparse.RequestParser()
+    parser.add_argument('type', type=str, help='类型（MOV/TV）', location='form', required=True)
+    parser.add_argument('tmdbid', type=str, help='TMDBID', location='form')
+    parser.add_argument('page', type=int, help='页码', location='form')
+
+    @media.doc(parser=parser)
+    def post(self):
+        """
+        根据TMDBID查询类似媒体
+        """
+        return WebAction().api_action(cmd='media_similar', data=self.parser.parse_args())
+
+
+@media.route('/recommendations')
+class MediaRecommendations(ClientResource):
+    parser = reqparse.RequestParser()
+    parser.add_argument('type', type=str, help='类型（MOV/TV）', location='form', required=True)
+    parser.add_argument('tmdbid', type=str, help='TMDBID', location='form')
+    parser.add_argument('page', type=int, help='页码', location='form')
+
+    @media.doc(parser=parser)
+    def post(self):
+        """
+        根据TMDBID查询推荐媒体
+        """
+        return WebAction().api_action(cmd='media_recommendations', data=self.parser.parse_args())
+
+
+@media.route('/person')
+class MediaPersonList(ClientResource):
+    parser = reqparse.RequestParser()
+    parser.add_argument('type', type=str, help='类型（MOV/TV）', location='form', required=True)
+    parser.add_argument('personid', type=str, help='演员ID', location='form')
+    parser.add_argument('page', type=int, help='页码', location='form')
+
+    @media.doc(parser=parser)
+    def post(self):
+        """
+        查询TMDB演员参演作品
+        """
+        return WebAction().api_action(cmd='person_medias', data=self.parser.parse_args())
 
 
 @media.route('/subtitle/download')
