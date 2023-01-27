@@ -24,9 +24,7 @@ from app.filter import Filter
 from app.helper import DbHelper, ProgressHelper, ThreadHelper, \
     MetaHelper, DisplayHelper, WordsHelper, CookieCloudHelper
 from app.indexer import Indexer
-from app.media import Category, Media
-from app.media.bangumi import Bangumi
-from app.media.douban import DouBan
+from app.media import Category, Media, Bangumi, DouBan
 from app.media.meta import MetaInfo, MetaBase
 from app.mediaserver import MediaServer
 from app.message import Message, MessageCenter
@@ -274,7 +272,8 @@ class WebAction:
             "/pts": {"func": Sites().signin, "desp": "站点签到"},
             "/rst": {"func": Sync().transfer_all_sync, "desp": "目录同步"},
             "/rss": {"func": Rss().rssdownload, "desp": "RSS订阅"},
-            "/db": {"func": DoubanSync().sync, "desp": "豆瓣同步"}
+            "/db": {"func": DoubanSync().sync, "desp": "豆瓣同步"},
+            "/udt": {"func": WebAction().__update_system, "desp": "系统更新"}
         }
         command = commands.get(msg)
         message = Message()
@@ -2277,6 +2276,11 @@ class WebAction:
             # Bangumi每日放送
             Week = data.get("week")
             res_list = Bangumi().get_bangumi_calendar(page=CurrentPage, week=Week)
+        elif Type == "SEARCH":
+            # 搜索词条
+            Keyword = data.get("keyword")
+            medias = WebUtils.search_media_infos(keyword=Keyword, page=CurrentPage)
+            res_list = [media.to_dict() for media in medias]
         else:
             res_list = []
         # 修正数据
@@ -2285,7 +2289,7 @@ class WebAction:
             fav, rssid = filetransfer.get_media_exists_flag(mtype=Type,
                                                             title=res.get("title"),
                                                             year=res.get("year"),
-                                                            tmdbid=res.get("rid"))
+                                                            tmdbid=res.get("id"))
             res.update({
                 'fav': fav,
                 'rssid': rssid
@@ -3436,39 +3440,12 @@ class WebAction:
         """
         根据关键字搜索相似词条
         """
-        medias = []
         SearchWord = data.get("keyword")
         if not SearchWord:
             return []
         SearchSourceType = data.get("searchtype")
-        if SearchSourceType == "tmdb":
-            use_douban_titles = False
-        else:
-            use_douban_titles = Config().get_config("laboratory").get("use_douban_titles")
-        _mediaserver = MediaServer()
-        if use_douban_titles:
-            _, key_word, season_num, episode_num, _, _ = StringUtils.get_keyword_from_string(SearchWord)
-            medias = DouBan().search_douban_medias(keyword=key_word,
-                                                   season=season_num,
-                                                   episode=episode_num)
-            for media in medias:
-                if _mediaserver.check_item_exists(title=media.title, year=media.year, tmdbid=media.tmdb_id):
-                    media.fav = "2"
-        else:
-            meta_info = MetaInfo(title=SearchWord)
-            tmdbinfos = Media().get_tmdb_infos(title=meta_info.get_name(), year=meta_info.year, num=20)
-            for tmdbinfo in tmdbinfos:
-                tmp_info = MetaInfo(title=SearchWord)
-                tmp_info.set_tmdb_info(tmdbinfo)
-                if meta_info.type == MediaType.TV and tmp_info.type != MediaType.TV:
-                    continue
-                if _mediaserver.check_item_exists(title=tmp_info.title, year=tmp_info.year, tmdbid=tmp_info.tmdb_id):
-                    tmp_info.fav = "2"
-                if tmp_info.begin_season:
-                    tmp_info.title = "%s 第%s季" % (tmp_info.title, cn2an.an2cn(meta_info.begin_season, mode='low'))
-                if tmp_info.begin_episode:
-                    tmp_info.title = "%s 第%s集" % (tmp_info.title, meta_info.begin_episode)
-                medias.append(tmp_info)
+        medias = WebUtils.search_media_infos(keyword=SearchWord,
+                                             source=SearchSourceType)
 
         return {"code": 0, "result": [media.to_dict() for media in medias]}
 

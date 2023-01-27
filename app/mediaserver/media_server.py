@@ -212,7 +212,10 @@ class MediaServer:
         """
         检查媒体库是否已存在某项目，非实时同步数据，仅用于展示
         """
-        return self.mediadb.exists(server_type=self._server_type.value, title=title, year=year, tmdbid=tmdbid)
+        return self.mediadb.exists(server_type=self._server_type.value,
+                                   title=title,
+                                   year=year,
+                                   tmdbid=tmdbid if str(tmdbid).isdigit() else None)
 
     def get_mediasync_status(self):
         """
@@ -223,3 +226,13 @@ class MediaServer:
             return {}
         else:
             return {"movie_count": status.MOVIE_COUNT, "tv_count": status.TV_COUNT, "time": status.UPDATE_TIME}
+
+    def get_iteminfo(self, itemid):
+        """
+          根据ItemId从媒体服务器查询项目详情
+          :param itemid: 在Emby中的ID
+          :return: 图片对应在TMDB中的URL
+          """
+        if not self.server:
+            return None
+        return self.server.get_iteminfo(itemid)

@@ -4,9 +4,8 @@ from threading import Lock
 import log
 from app.downloader import Downloader
 from app.filter import Filter
-from app.media.douban import DouBan
 from app.helper import DbHelper, MetaHelper
-from app.media import Media
+from app.media import Media, DouBan
 from app.media.meta import MetaInfo
 from app.message import Message
 from app.searcher import Searcher
@@ -530,6 +529,8 @@ class Subscribe:
                                                      image=media_info.get_message_image(),
                                                      desc=media_info.overview,
                                                      note=self.gen_rss_note(media_info))
+                    # 更新缺失季集
+                    self.dbhelper.update_rss_tv_episodes(rid=rssid, episodes=range(total - lack + 1, total + 1))
                     # 清除TMDB缓存
                     self.metahelper.delete_meta_data_by_tmdbid(media_info.tmdb_id)
         log.info("【Subscribe】订阅TMDB信息刷新完成")

@@ -521,7 +521,7 @@ class Media:
                     tmdb_info['name'] = cn_title
         return tmdb_info
 
-    def get_tmdb_infos(self, title, year=None, mtype: MediaType = None, num=6):
+    def get_tmdb_infos(self, title, year=None, mtype: MediaType = None, page=1):
         """
         查询名称中有关键字的所有的TMDB信息并返回
         """
@@ -544,7 +544,7 @@ class Media:
                 results = self.__search_movie_tmdbinfos(title, year)
             else:
                 results = self.__search_tv_tmdbinfos(title, year)
-        return results[:num]
+        return results[(page - 1) * 20:page * 20]
 
     def __search_multi_tmdbinfos(self, title):
         """
@@ -893,6 +893,7 @@ class Media:
         return [{
             'id': tv.get("id"),
             'orgid': tv.get("id"),
+            'tmdbid': tv.get("id"),
             'title': tv.get("name"),
             'type': 'TV',
             'year': tv.get("first_air_date")[0:4] if tv.get("first_air_date") else "",
@@ -909,6 +910,7 @@ class Media:
         return [{
             'id': movie.get("id"),
             'orgid': movie.get("id"),
+            'tmdbid': movie.get("id"),
             'title': movie.get("title"),
             'type': 'MOV',
             'year': movie.get("release_date")[0:4] if movie.get("release_date") else "",
@@ -2053,6 +2055,16 @@ class Media:
             return "https://www.themoviedb.org/movie/%s" % tmdbid
         else:
             return "https://www.themoviedb.org/tv/%s" % tmdbid
+
+    def get_episode_images(self, tv_id, season_id, episode_id):
+        """
+        获取剧集中某一集封面
+        """
+        res = self.tv.episode_images(tv_id, season_id, episode_id)
+        if len(res.get("stills", [])) > 0:
+            return TMDB_IMAGE_W500_URL % res.get("stills", [{}])[0].get("file_path")
+        else:
+            return ""
 
     def get_tmdb_factinfo(self, media_info):
         """
