@@ -125,7 +125,8 @@ def login():
         RestypeDict = ModuleConf.TORRENT_SEARCH_PARAMS.get("restype")
         PixDict = ModuleConf.TORRENT_SEARCH_PARAMS.get("pix")
         SiteFavicons = Sites().get_site_favicon()
-        SiteDict = Indexer().get_indexer_hash_dict()
+        Indexers = Indexer().get_builtin_indexers(check=False)
+        SearchSource = "douban" if Config().get_config("laboratory").get("use_douban_titles") else "tmdb"
         return render_template('navigation.html',
                                GoPage=GoPage,
                                UserName=userinfo.username,
@@ -138,7 +139,8 @@ def login():
                                SyncMod=SyncMod,
                                SiteFavicons=SiteFavicons,
                                RmtModeDict=RmtModeDict,
-                               SiteDict=SiteDict)
+                               Indexers=Indexers,
+                               SearchSource=SearchSource)
 
     def redirect_to_login(errmsg=''):
         """
@@ -394,6 +396,7 @@ def recommend():
     TmdbId = request.args.get("tmdbid") or ""
     PersonId = request.args.get("personid") or ""
     Keyword = request.args.get("keyword") or ""
+    Source = request.args.get("source") or ""
     return render_template("discovery/recommend.html",
                            Type=Type,
                            SubType=SubType,
@@ -403,7 +406,8 @@ def recommend():
                            TmdbId=TmdbId,
                            PersonId=PersonId,
                            SubTitle=SubTitle,
-                           Keyword=Keyword)
+                           Keyword=Keyword,
+                           Source=Source)
 
 
 # 电影推荐页面
@@ -471,10 +475,11 @@ def downloading():
 @App.route('/downloaded', methods=['POST', 'GET'])
 @login_required
 def downloaded():
-    Items = WebAction().get_downloaded({"page": 1}).get("Items")
-    return render_template("download/downloaded.html",
-                           Count=len(Items),
-                           Items=Items)
+    CurrentPage = request.args.get("page") or 1
+    return render_template("discovery/recommend.html",
+                           Type='DOWNLOADED',
+                           Title='近期下载',
+                           CurrentPage=CurrentPage)
 
 
 @App.route('/torrent_remove', methods=['POST', 'GET'])

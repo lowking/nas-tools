@@ -13,7 +13,7 @@
 <!-- 业务页面代码 -->
 <div class="page-body">
   <div class="container-xl">
-    <div class="row" id="recommend_content">
+    <div class="d-grid gap-3 grid-media-card" id="recommend_content">
     </div>
   </div>
 </div>
@@ -51,11 +51,14 @@
   // 关键字
   var Keyword = '{{ Keyword }}';
 
+  // 来源
+  var Source = '{{ Source }}';
+
   // 插入N个占位卡片 代替loading动画
   var page_card_num = 20;
   function add_loading_card_placeholder() {
     for (let i = 0; i < page_card_num; i++) {
-      let html = '<div class="mb-3 col-6 col-md-3 col-xl-2" id="loading_card_placeholder_' + i + '"><normal-card-placeholder></normal-card-placeholder></div>';
+      let html = '<div id="loading_card_placeholder_' + i + '"><normal-card-placeholder></normal-card-placeholder></div>';
       $("#recommend_content").append(html);
     }
   }
@@ -83,7 +86,8 @@
       "week": Week,
       "tmdbid": TmdbId,
       "personid": PersonId,
-      "keyword": Keyword
+      "keyword": Keyword,
+      "source": Source
     }, function (ret) {
       if (ret.Items.length > 0) {
         // 记录页码
@@ -93,32 +97,47 @@
         page_card_num = ret.Items.length;
       } else {
         if (CurrentPage == 1) {
-          $("#recommend_content").html($("#no_recommend_html").text());
+          $("#recommend_content").removeClass("grid-media-card").html($("#no_recommend_html").text());
         }
       }
       del_loading_card_placeholder();
       // 插入HTML
       for (let i = 0; i < ret.Items.length; i++) {
         let item = ret.Items[i];
-        let html = '';
-        html += '<div class="mb-3 col-6 col-md-3 col-xl-2">';
-          html += `<normal-card
-                    card-tmdbId="${item.id}"
-                    card-pageType="${item.type}"
-                    card-showSub="1"
-                    card-image="${item.image}"
-                    card-weekday="${item.weekday}"
-                    card-fav="${item.fav}"
-                    card-vote="${item.vote}"
-                    card-year="${item.year}"
-                    card-title="${item.title}"
-                    card-overview="${item.overview}"
-                   ></normal-card>`;
-        html += '</div>';
+        let html = `<normal-card
+                      card-tmdbId="${item.id}"
+                      card-mediatype="${item.media_type}"
+                      card-showSub="1"
+                      card-image="${item.image}"
+                      card-weekday="${item.weekday}"
+                      card-fav="${item.fav}"
+                      card-vote="${item.vote}"
+                      card-year="${item.year}"
+                      card-title="${item.title}"
+                      card-overview="${item.overview}"
+                      card-restype="${item.media_type}"
+                      card-date="${item.date}"
+                      card-site="${item.site}"
+                    ></normal-card>`;
         $("#recommend_content").append(html);
       }
       window_history();
+      if (ret.Items.length > 0) {
+        loading_data_max();
+      }
     });
+  }
+
+  // 如果没有滚动条 继续加载
+  function loading_data_max() {
+    const page_wrapper = document.querySelector(".page-wrapper");
+    if (page_wrapper && page_wrapper.scrollHeight <= page_wrapper.clientHeight) {
+      // normal_card && normal_card.length >= 20 明显的还有数据的特征 减少额外的网络请求
+      const normal_card = document.querySelectorAll("normal-card");
+      if (normal_card && normal_card.length >= 20) {
+        loading_data();
+      }
+    }
   }
 
   $(document).ready(function () {
@@ -132,6 +151,7 @@
   // 后退时sessionStorage.CurrentPage 未被清除, 则更新当前页码
   if (sessionStorage.CurrentPage) {
     CurrentPage = sessionStorage.CurrentPage;
+    loading_data_max();
   } else {
     // 否则初始化数据
     loading_data();
