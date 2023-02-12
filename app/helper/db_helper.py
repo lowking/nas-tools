@@ -15,7 +15,7 @@ class DbHelper:
     _db = MainDb()
 
     @DbPersist(_db)
-    def insert_search_results(self, media_items: list):
+    def insert_search_results(self, media_items: list, title=None, ident_flag=True):
         """
         将返回信息插入数据库
         """
@@ -29,38 +29,39 @@ class DbHelper:
                 mtype = "MOV"
             else:
                 mtype = "ANI"
-            data_list.append(SEARCHRESULTINFO(
-                TORRENT_NAME=media_item.org_string,
-                ENCLOSURE=media_item.enclosure,
-                DESCRIPTION=media_item.description,
-                TYPE=mtype,
-                TITLE=media_item.title or media_item.get_name(),
-                YEAR=media_item.year,
-                SEASON=media_item.get_season_string(),
-                EPISODE=media_item.get_episode_string(),
-                ES_STRING=media_item.get_season_episode_string(),
-                VOTE=media_item.vote_average or "0",
-                IMAGE=media_item.get_backdrop_image(default=False),
-                POSTER=media_item.get_poster_image(),
-                TMDBID=media_item.tmdb_id,
-                OVERVIEW=media_item.overview,
-                RES_TYPE=json.dumps({
-                    "respix": media_item.resource_pix,
-                    "restype": media_item.resource_type,
-                    "reseffect": media_item.resource_effect,
-                    "video_encode": media_item.video_encode
-                }),
-                RES_ORDER=media_item.res_order,
-                SIZE=StringUtils.str_filesize(int(media_item.size)),
-                SEEDERS=media_item.seeders,
-                PEERS=media_item.peers,
-                SITE=media_item.site,
-                SITE_ORDER=media_item.site_order,
-                PAGEURL=media_item.page_url,
-                OTHERINFO=media_item.resource_team,
-                UPLOAD_VOLUME_FACTOR=media_item.upload_volume_factor,
-                DOWNLOAD_VOLUME_FACTOR=media_item.download_volume_factor
-            ))
+            data_list.append(
+                SEARCHRESULTINFO(
+                    TORRENT_NAME=media_item.org_string,
+                    ENCLOSURE=media_item.enclosure,
+                    DESCRIPTION=media_item.description,
+                    TYPE=mtype if ident_flag else '',
+                    TITLE=media_item.title if ident_flag else title,
+                    YEAR=media_item.year if ident_flag else '',
+                    SEASON=media_item.get_season_string() if ident_flag else '',
+                    EPISODE=media_item.get_episode_string() if ident_flag else '',
+                    ES_STRING=media_item.get_season_episode_string() if ident_flag else '',
+                    VOTE=media_item.vote_average or "0",
+                    IMAGE=media_item.get_backdrop_image(default=False, original=True),
+                    POSTER=media_item.get_poster_image(),
+                    TMDBID=media_item.tmdb_id,
+                    OVERVIEW=media_item.overview,
+                    RES_TYPE=json.dumps({
+                        "respix": media_item.resource_pix,
+                        "restype": media_item.resource_type,
+                        "reseffect": media_item.resource_effect,
+                        "video_encode": media_item.video_encode
+                    }),
+                    RES_ORDER=media_item.res_order,
+                    SIZE=StringUtils.str_filesize(int(media_item.size)),
+                    SEEDERS=media_item.seeders,
+                    PEERS=media_item.peers,
+                    SITE=media_item.site,
+                    SITE_ORDER=media_item.site_order,
+                    PAGEURL=media_item.page_url,
+                    OTHERINFO=media_item.resource_team,
+                    UPLOAD_VOLUME_FACTOR=media_item.upload_volume_factor,
+                    DOWNLOAD_VOLUME_FACTOR=media_item.download_volume_factor
+                ))
         self._db.insert(data_list)
 
     def get_search_result_by_id(self, dl_id):
@@ -1343,8 +1344,11 @@ class DbHelper:
         查询站点数据历史
         """
         if strict_urls:
-            return self._db.query(SITEUSERINFOSTATS).filter(
-                SITEUSERINFOSTATS.URL.in_(tuple(strict_urls + ["__DUMMY__"]))).limit(num).all()
+            # 根据站点优先级排序
+            return self._db.query(SITEUSERINFOSTATS) \
+                .join(CONFIGSITE, SITEUSERINFOSTATS.SITE == CONFIGSITE.NAME) \
+                .filter(SITEUSERINFOSTATS.URL.in_(tuple(strict_urls + ["__DUMMY__"]))) \
+                .order_by(cast(CONFIGSITE.PRI, Integer).asc()).limit(num).all()
         else:
             return self._db.query(SITEUSERINFOSTATS).limit(num).all()
 
@@ -1652,7 +1656,10 @@ class DbHelper:
         if brush_id:
             return self._db.query(SITEBRUSHTASK).filter(SITEBRUSHTASK.ID == int(brush_id)).first()
         else:
-            return self._db.query(SITEBRUSHTASK).all()
+            # 根据站点优先级排序
+            return self._db.query(SITEBRUSHTASK) \
+                .join(CONFIGSITE, SITEBRUSHTASK.SITE == CONFIGSITE.ID) \
+                .order_by(cast(CONFIGSITE.PRI, Integer).asc()).all()
 
     def get_brushtask_totalsize(self, brush_id):
         """
